@@ -62,6 +62,7 @@ export function useCloudSync(data: AppData, setData: Dispatch<SetStateAction<App
       const { data: auth } = await client.auth.getUser()
       if (!active) return
       setUserId(auth.user?.id ?? null)
+      if (auth.user) void client.from('profiles').upsert({ id: auth.user.id, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', updated_at: new Date().toISOString() }, { onConflict: 'id' })
       setStatus(auth.user ? 'loading' : 'guest')
     }
     void load()

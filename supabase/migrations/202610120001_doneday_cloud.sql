@@ -60,6 +60,33 @@ create index if not exists tasks_owner_updated on public.tasks(user_id, updated_
 create index if not exists birthdays_owner_updated on public.birthdays(user_id, updated_at desc) where deleted_at is null;
 create index if not exists schedules_due on public.reminder_schedules(send_at) where status = 'pending';
 
+-- Rebuild pending schedules whenever a task is created, edited, completed, or deleted.
+-- The task payload keeps the existing DoneDay offset model; the server stores an absolute
+-- instant using the owner's IANA timezone, so the dispatcher never trusts browser timers.
+create or replace function public.rebuild_task_reminders() returns trigger language plpgsql security definer set search_path = public as $$
+declare v_offset integer; v_send_at timestamptz; v_timezone text;
+begin
+  if tg_op = 'DELETE' then
+    update public.reminder_schedules set status = 'cancelled', updated_at = now() where task_id = old.id and status = 'pending';
+    return old;
+  end if;
+  update public.reminder_schedules set status = 'cancelled', updated_at = now() where task_id = new.id and status = 'pending';
+  if new.completed or new.due_date is null or new.due_time is null or coalesce((new.data ->> 'reminder')::boolean, false) = false then return new; end if;
+  select timezone into v_timezone from public.profiles where id = new.user_id;
+  v_timezone := coalesce(v_timezone, 'UTC');
+  for v_offset in select value::integer from jsonb_array_elements_text(coalesce(new.data -> 'reminderOffsets', '[0]'::jsonb)) loop
+    v_send_at := ((new.due_date + new.due_time) - make_interval(mins => v_offset)) at time zone v_timezone;
+    if v_send_at > now() then
+      insert into public.reminder_schedules(id, user_id, task_id, send_at, payload)
+      values ('task:' || new.id || ':' || extract(epoch from new.updated_at)::bigint || ':' || v_offset, new.user_id, new.id, v_send_at, jsonb_build_object('body', new.title, 'url', '/?task=' || (new.data ->> 'id')))
+      on conflict (id) do nothing;
+    end if;
+  end loop;
+  return new;
+end; $$;
+drop trigger if exists tasks_rebuild_reminders on public.tasks;
+create trigger tasks_rebuild_reminders after insert or update or delete on public.tasks for each row execute procedure public.rebuild_task_reminders();
+
 create or replace function public.handle_new_user() returns trigger language plpgsql security definer set search_path = public as $$
 begin insert into public.profiles(id, display_name) values (new.id, coalesce(new.raw_user_meta_data ->> 'display_name', '')) on conflict (id) do nothing; return new; end; $$;
 drop trigger if exists on_auth_user_created on auth.users;
