@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { createTask, isOverdue, nextRecurrenceDate, parseData } from '../src/domain'
+import { birthdayDaysAway, createTask, isOverdue, nextRecurrenceDate, parseData, taskReminderTimes, type Birthday } from '../src/domain'
+import { dueTaskReminders } from '../src/reminders'
 
 describe('task data helpers', () => {
   it('creates a normalized task with safe defaults', () => {
@@ -38,5 +39,27 @@ describe('task data helpers', () => {
     expect(imported.categories[0].color).toBe('#94a3b8')
     expect(parseData('{"tasks":[],"categories":[]}').categories.length).toBeGreaterThan(0)
     expect(() => parseData('{"tasks":[]}')).toThrow()
+  })
+
+  it('migrates existing backups to version 2 without losing tasks', () => {
+    const migrated = parseData(JSON.stringify({ tasks: [{ id: 'legacy', title: 'Keep me', reminder: true }], categories: [] }))
+    expect(migrated.version).toBe(2)
+    expect(migrated.tasks[0].title).toBe('Keep me')
+    expect(migrated.tasks[0].reminderOffsets).toEqual([0])
+    expect(migrated.birthdays).toEqual([])
+    expect(migrated.routines).toEqual([])
+  })
+
+  it('calculates annual birthdays and follows the February 29 policy', () => {
+    const birthday: Birthday = { id: 'leap', name: 'Leap', month: 2, day: 29, year: 2000, relationship: 'Friend', notes: '', giftIdeas: '', photo: '', reminderOffsets: [0], reminderTime: '09:00', createdAt: '', updatedAt: '' }
+    expect(birthdayDaysAway(birthday, new Date('2025-02-27T12:00:00'), 'feb28')).toBe(1)
+    expect(birthdayDaysAway(birthday, new Date('2025-02-27T12:00:00'), 'mar1')).toBe(2)
+  })
+
+  it('schedules multiple task offsets and prevents a completed task from alerting', () => {
+    const task = createTask({ title: 'Call Mum', dueDate: '2026-10-12', dueTime: '10:00', reminder: true, reminderOffsets: [0, 10] })
+    expect(taskReminderTimes(task)).toHaveLength(2)
+    expect(dueTaskReminders([task], new Date('2026-10-12T09:50:10'))).toHaveLength(1)
+    expect(dueTaskReminders([{ ...task, completed: true }], new Date('2026-10-12T09:50:10'))).toEqual([])
   })
 })

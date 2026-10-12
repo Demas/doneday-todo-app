@@ -252,4 +252,24 @@ describe('DoneDay task workflow', () => {
     expect(document.activeElement).toBe(save)
     expect(dialog).toHaveAttribute('aria-modal', 'true')
   })
+
+  it('adds planner tasks and daily routines on the selected date', () => {
+    render(<App />)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Daily Planner' })[0])
+    fireEvent.change(screen.getByRole('textbox', { name: 'Planner quick add task' }), { target: { value: 'Plan the afternoon' } })
+    fireEvent.submit(screen.getByRole('textbox', { name: 'Planner quick add task' }).closest('form')!)
+    expect(screen.getByText('Plan the afternoon')).toBeInTheDocument()
+    fireEvent.change(screen.getByRole('textbox', { name: 'Routine name' }), { target: { value: 'Read' } })
+    fireEvent.submit(screen.getByRole('textbox', { name: 'Routine name' }).closest('form')!)
+    expect(screen.getByText('Read')).toBeInTheDocument()
+  })
+
+  it('creates and shows an annual birthday', () => {
+    render(<App />)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Birthdays' })[0])
+    fireEvent.change(screen.getByRole('textbox', { name: 'Birthday name' }), { target: { value: 'Sarah' } })
+    fireEvent.change(screen.getByLabelText('Birthday date'), { target: { value: '2000-12-24' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add birthday' }))
+    expect(screen.getByText('Sarah')).toBeInTheDocument()
+  })
 })
