@@ -6,6 +6,7 @@ import { cloudConfigured, supabase } from './supabase'
 export type CloudStatus = 'guest' | 'loading' | 'synced' | 'syncing' | 'error'
 const importedKey = (userId: string) => `doneday-cloud-imported:${userId}`
 const snapshot = (data: AppData) => JSON.stringify(data)
+const cloudId = (userId: string, localId: string) => `${userId}:${localId}`
 
 async function fetchCloudData(userId: string): Promise<AppData | null> {
   if (!supabase) return null
@@ -39,10 +40,10 @@ export async function uploadCloudData(userId: string, data: AppData) {
     const { error } = await client.from(table).upsert(records, { onConflict: 'id' })
     if (error) throw error
   }
-  await write('tasks', data.tasks.map(task => ({ id: task.id, user_id: userId, title: task.title, description: task.description, due_date: task.dueDate || null, due_time: task.dueTime || null, priority: task.priority, category_id: task.categoryId || null, completed: task.completed, completed_at: task.completedAt || null, recurrence: task.recurrence, data: task, updated_at: timestamp })))
-  await write('categories', data.categories.map(category => ({ id: category.id, user_id: userId, name: category.name, color: category.color, data: category, updated_at: timestamp })))
-  await write('birthdays', data.birthdays.map(birthday => ({ id: birthday.id, user_id: userId, name: birthday.name, month: birthday.month, day: birthday.day, year: birthday.year ?? null, data: birthday, updated_at: timestamp })))
-  await write('routines', data.routines.map(routine => ({ id: routine.id, user_id: userId, title: routine.title, data: routine, updated_at: timestamp })))
+  await write('categories', data.categories.map(category => ({ id: cloudId(userId, category.id), user_id: userId, name: category.name, color: category.color, data: category, updated_at: timestamp })))
+  await write('tasks', data.tasks.map(task => ({ id: cloudId(userId, task.id), user_id: userId, title: task.title, description: task.description, due_date: task.dueDate || null, due_time: task.dueTime || null, priority: task.priority, category_id: task.categoryId ? cloudId(userId, task.categoryId) : null, completed: task.completed, completed_at: task.completedAt || null, recurrence: task.recurrence, data: task, updated_at: timestamp })))
+  await write('birthdays', data.birthdays.map(birthday => ({ id: cloudId(userId, birthday.id), user_id: userId, name: birthday.name, month: birthday.month, day: birthday.day, year: birthday.year ?? null, data: birthday, updated_at: timestamp })))
+  await write('routines', data.routines.map(routine => ({ id: cloudId(userId, routine.id), user_id: userId, title: routine.title, data: routine, updated_at: timestamp })))
   const { error } = await client.from('user_settings').upsert({ user_id: userId, data: data.settings, updated_at: timestamp }, { onConflict: 'user_id' })
   if (error) throw error
 }
