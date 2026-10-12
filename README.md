@@ -1,41 +1,99 @@
-# DoneDay
+# DoneDay — Make Today Count
 
-DoneDay is a browser-based to-do list built with React, TypeScript, and Vite. Tasks are stored in the browser's local storage, so the app does not require a backend, authentication service, or environment variables.
-
-## Requirements
-
-- Node.js 20 or later
-- npm 10 or later
+DoneDay is a React, TypeScript, and Vite task planner. It works immediately in guest mode using browser storage, with optional Supabase accounts, cloud synchronization, Web Push, and installable PWA support.
 
 ## Local development
+
+Requirements: Node.js 20+ and npm 10+.
 
 ```bash
 npm install
 npm run dev
 ```
 
-Vite will print the local URL when the development server is ready.
-
-## Verification
+Run the automated checks with:
 
 ```bash
 npm test
 npm run build
 ```
 
-The production build runs TypeScript checking and writes deployable static files to `dist/`.
+The production files are written to `dist/`.
 
-## Deploying to Vercel
+## Guest mode
 
-1. Push this repository to a Git provider and import it in Vercel, or run `vercel` from this directory.
-2. Leave the framework preset as **Vite**.
-3. Use `npm run build` as the build command.
-4. Use `dist` as the output directory.
-5. Do not add environment variables; this app does not use any.
-6. Deploy.
+No account or environment variables are required to use DoneDay. Guest tasks, birthdays, routines, settings, and in-app reminders remain in this browser’s local storage. Export a JSON backup from Settings before clearing browser data or switching browsers.
 
-Vercel detects Vite from `package.json`, so no `vercel.json` is necessary. The app currently has one document route and switches views in the browser, so it does not need an SPA rewrite rule.
+## Supabase setup
 
-## Data and privacy
+Cloud features are deliberately inactive until configured. Copy `.env.example` to `.env.local` and set only the public values:
 
-Tasks and settings are saved locally in the browser. Export a JSON backup from Settings before moving browsers or clearing browser data.
+```bash
+VITE_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_YOUR_KEY
+VITE_VAPID_PUBLIC_KEY=YOUR_URL_SAFE_BASE64_PUBLIC_KEY
+```
+
+Never put a Supabase secret/service-role key, VAPID private key, scheduler secret, or database password in a `VITE_` variable.
+
+1. Create a Supabase project.
+2. Install the Supabase CLI and authenticate it locally.
+3. Link the project, then apply the versioned database migration:
+
+   ```bash
+   supabase link --project-ref YOUR_PROJECT_REF
+   supabase db push
+   ```
+
+4. In **Authentication → URL Configuration**, add `http://localhost:5173/` and `https://doneday-todo-app.vercel.app/` to redirect URLs. Enable email confirmation and configure your email sender/template.
+5. Add the three public values above to Vercel’s Production and Preview environment settings, then redeploy.
+
+The migration creates profiles, tasks, subtasks, categories, tags, task tags, routines, birthdays, user settings, schedules, push subscriptions, and delivery records. It enables Row Level Security for every user-facing table. The frontend only uses Supabase’s publishable key; row policies bind every owned row to `auth.uid()`.
+
+## Auth and cloud data
+
+Use the **Guest mode / Cloud synced** button in the lower-right corner to create an account, sign in, request a reset link, or sign out. Email verification is provided by Supabase Auth.
+
+After sign-in, DoneDay offers to save existing browser data. It uploads tasks, categories, birthdays, routines, and settings only after the user confirms. Original local data is retained. Cloud rows use the existing stable item IDs, so retrying an upload updates the same records instead of creating duplicates.
+
+## Background notifications
+
+The repository includes a standards-based Service Worker, PushManager subscription client, VAPID-aware Edge Function source, and a secure scheduler endpoint.
+
+1. Generate VAPID keys with a trusted tool and set `VITE_VAPID_PUBLIC_KEY` in Vercel/local `.env.local`.
+2. Set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `SCHEDULER_SECRET`, and `SUPABASE_SECRET_KEY` (or legacy `SUPABASE_SERVICE_ROLE_KEY`) as **Supabase Edge Function secrets**. These values are server-only.
+3. Deploy the functions:
+
+   ```bash
+   supabase functions deploy reminder-dispatch
+   supabase functions deploy send-test-push
+   supabase functions deploy delete-account
+   ```
+
+4. Configure a Supabase Cron job using `pg_cron` and `pg_net` to invoke `reminder-dispatch` at the cadence supported by your plan. The request must include the `x-scheduler-secret` stored in Supabase Vault. Follow the [Supabase scheduling guide](https://supabase.com/docs/guides/functions/schedule-functions) rather than placing the secret in SQL or frontend code.
+5. Sign in, use **Enable push**, then **Send test** on a supported device. Check the Edge Function and cron logs for delivery results.
+
+Push is not tested or claimed to be active until those provider steps are completed on a real device. Browser and OS settings can block or delay pushes. On iPhone, push requires a Home Screen installation and permission on supported iOS versions. DoneDay does not promise background alarm sounds or delivery while a device is offline.
+
+## PWA installation
+
+- **Chrome on Android:** open the site menu and choose **Install app** or **Add to Home screen**.
+- **Desktop Chrome/Edge:** select the install icon in the address bar.
+- **iPhone Safari:** Share → **Add to Home Screen**. Open the installed app, then allow notifications when prompted.
+
+The service worker caches only navigation documents for an offline fallback. It does not cache Supabase API responses or authenticated private data.
+
+## Vercel deployment
+
+Keep the existing Vercel project and domain. Use the **Vite** preset, build command `npm run build`, and output directory `dist`. Configure public Supabase and VAPID values as Vercel environment variables; configure all privileged values only in Supabase Edge Function secrets.
+
+## Troubleshooting
+
+- **Cloud button says setup required:** verify `.env.local` has the URL and publishable key, restart Vite, and confirm Vercel environment variables are set.
+- **Account email does not arrive:** check Supabase Auth email confirmation, SMTP sender settings, and redirect URL allow-list.
+- **Push is unavailable:** confirm HTTPS, PWA/service-worker registration, VAPID public key, browser permission, an authenticated account, and deployed functions.
+- **Sync error:** check browser network access, Supabase RLS policies, and the project’s API logs. Guest data remains locally stored.
+
+## Security notes
+
+`.env.local`, `node_modules`, build output, and generated local files are excluded by `.gitignore`. Do not commit provider credentials. The application does not include a custom password system: authentication, email verification, password resets, and session persistence are handled by Supabase Auth.

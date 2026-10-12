@@ -1,0 +1,13 @@
+{
+  "name": "DoneDay — Make Today Count",
+  "short_name": "DoneDay",
+  "description": "A focused daily planner and task manager.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FFFFFF",
+  "theme_color": "#FACC15",
+  "icons": [
+    { "src": "/icons/doneday-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icons/doneday-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

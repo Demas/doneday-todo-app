@@ -10,6 +10,7 @@
     "preview": "vite preview --configLoader native --host 0.0.0.0"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.98.0",
     "react": "latest",
     "react-dom": "latest",
     "lucide-react": "^0.468.0"
@@ -20,6 +21,7 @@
     "@testing-library/react": "^16.1.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@types/node": "^22.10.5",
     "typescript": "~5.7.2",
     "vitest": "^2.1.8",
     "jsdom": "^25.0.1",

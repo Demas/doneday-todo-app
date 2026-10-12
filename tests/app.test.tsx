@@ -272,4 +272,11 @@ describe('DoneDay task workflow', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add birthday' }))
     expect(screen.getByText('Sarah')).toBeInTheDocument()
   })
+
+  it('keeps guest mode available and explains that cloud setup is optional', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'Account and cloud sync' }))
+    expect(screen.getByRole('dialog')).toHaveTextContent('Keep using DoneDay as a guest')
+    expect(screen.getByText(/VITE_SUPABASE_URL/)).toBeInTheDocument()
+  })
 })
