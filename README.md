@@ -29,7 +29,7 @@ No account or environment variables are required to use DoneDay. Guest tasks, bi
 Cloud features are deliberately inactive until configured. Copy `.env.example` to `.env.local` and set only the public values:
 
 ```bash
-VITE_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
+VITE_SUPABASE_URL=https://yccyogdfwtisxgryfvik.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_YOUR_KEY
 VITE_VAPID_PUBLIC_KEY=YOUR_URL_SAFE_BASE64_PUBLIC_KEY
 ```
