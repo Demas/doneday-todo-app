@@ -11,20 +11,20 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.98.0",
+    "lucide-react": "^0.468.0",
     "react": "latest",
-    "react-dom": "latest",
-    "lucide-react": "^0.468.0"
+    "react-dom": "latest"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "latest",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",
+    "@types/node": "^22.10.5",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "@types/node": "^22.10.5",
-    "typescript": "~5.7.2",
-    "vitest": "^2.1.8",
+    "@vitejs/plugin-react": "latest",
     "jsdom": "^25.0.1",
-    "vite": "latest"
+    "typescript": "~5.7.2",
+    "vite": "latest",
+    "vitest": "^5.0.4"
   }
 }
