@@ -92,7 +92,7 @@ Keep the existing Vercel project and domain. Use the **Vite** preset, build comm
 - **Cloud button says setup required:** verify `.env.local` has the URL and publishable key, restart Vite, and confirm Vercel environment variables are set.
 - **Account email does not arrive:** check Supabase Auth email confirmation, SMTP sender settings, and redirect URL allow-list.
 - **Push is unavailable:** confirm HTTPS, PWA/service-worker registration, VAPID public key, browser permission, an authenticated account, and deployed functions.
-- **Sync error:** check browser network access, Supabase RLS policies, and the project’s API logs. Guest data remains locally stored.
+- **Sync needs attention / `42501 permission denied`:** apply every migration, including `202610130002_grant_authenticated_cloud_access.sql`, with `supabase db push` (or run that file in the Supabase SQL Editor). It grants the authenticated browser role table access while the existing RLS policies still restrict every row to `auth.uid()`. Then sign in and select **Retry Sync**. Guest data remains locally stored and is uploaded only after selecting **Save existing local data**.
 
 ## Security notes
 
