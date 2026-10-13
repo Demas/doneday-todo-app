@@ -24,6 +24,11 @@ describe('background push test request', () => {
     await expect(sendPushTest()).rejects.toThrow(/push service did not accept/i)
   })
 
+  it('keeps VAPID diagnostics useful without returning key material', async () => {
+    mocks.invoke.mockResolvedValue({ data: null, error: { context: new Response(JSON.stringify({ code: 'VAPID_PUBLIC_KEY_INVALID' }), { status: 503 }) } })
+    await expect(sendPushTest()).rejects.toThrow(/configuration needs attention/i)
+  })
+
   it('reports a successful dispatch without claiming that the device displayed it', async () => {
     mocks.invoke.mockResolvedValue({ data: { code: 'PUSH_DISPATCHED', sent: 1, message: 'Test notification dispatched to 1 device.' }, error: null })
     await expect(sendPushTest()).resolves.toBe('Test notification dispatched to 1 device.')
@@ -35,6 +40,8 @@ describe('background push test request', () => {
     expect(functionSource).toContain("if (request.method === 'OPTIONS')")
     expect(functionSource).toContain("'Access-Control-Allow-Origin': origin")
     expect(functionSource).toContain('client.auth.getUser()')
+    expect(functionSource).toContain("logFailure('configure_vapid', cause)")
+    expect(functionSource).toContain('VAPID_PUBLIC_KEY_INVALID')
     expect(config).toMatch(/\[functions\.send-test-push\]\s+verify_jwt = false/)
   })
 })

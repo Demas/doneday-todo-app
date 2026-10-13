@@ -37,6 +37,9 @@ async function functionErrorMessage(error: unknown) {
       if (body.code === 'NO_SUBSCRIPTIONS') return 'No devices are registered for background push. Select Enable push on this device first.'
       if (body.code === 'PUSH_DELIVERY_FAILED') return 'DoneDay reached your registered device, but the push service did not accept the notification.'
       if (body.code === 'PUSH_NOT_CONFIGURED') return 'DoneDay push delivery has not been configured on the server.'
+      if (body.code === 'VAPID_SUBJECT_INVALID' || body.code === 'VAPID_PUBLIC_KEY_INVALID' || body.code === 'VAPID_PRIVATE_KEY_INVALID' || body.code === 'VAPID_CONFIGURATION_FAILED') return 'DoneDay push configuration needs attention on the server.'
+      if (body.code === 'PUSH_RUNTIME_UNSUPPORTED') return 'The DoneDay push runtime is unavailable on the server.'
+      if (body.code === 'SUBSCRIPTIONS_UNAVAILABLE') return 'DoneDay could not load your registered devices. Retry in a moment.'
       if (typeof body.message === 'string' && body.message) return body.message
     } catch { /* Use the status below when the response has no JSON body. */ }
     if (response.status === 401) return 'Your session has expired. Sign in again before sending a test notification.'
