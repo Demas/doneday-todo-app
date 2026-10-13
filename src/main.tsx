@@ -4,6 +4,7 @@ import App from './App'
 import './styles.css'
 import './planning.css'
 import './cloud.css'
+import './welcome.css'
 import { registerDoneDayServiceWorker } from './push'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

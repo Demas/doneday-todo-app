@@ -1,0 +1,5 @@
+import { Check, Cloud, LogIn, UserRound } from 'lucide-react'
+
+export function WelcomeScreen({ onCreateAccount, onSignIn, onContinueGuest }: { onCreateAccount: () => void; onSignIn: () => void; onContinueGuest: () => void }) {
+  return <main className="welcome-screen"><section className="welcome-card" aria-labelledby="welcome-title"><div className="welcome-mark"><Check size={31} strokeWidth={3}/></div><div className="eyebrow">MAKE TODAY COUNT</div><h1 id="welcome-title">Welcome to DoneDay</h1><h2>Make Today Count.</h2><p>Plan your tasks, organize your daily activities, and get reminders for upcoming tasks, meetings, and birthdays—all in one simple place.</p><div className="welcome-actions"><button className="btn primary" onClick={onCreateAccount}><UserRound size={17}/> Create Free Account</button><button className="btn secondary" onClick={onSignIn}><LogIn size={17}/> Sign In</button><button className="text-link welcome-guest" onClick={onContinueGuest}><Cloud size={15}/> Continue as Guest</button></div></section></main>
+}

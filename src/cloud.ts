@@ -2,8 +2,10 @@ import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 
 import type { AppData, Birthday, Category, Routine, Task } from './domain'
 import { parseData } from './domain'
 import { cloudConfigured, supabase } from './supabase'
+import { cleanDisplayName } from './personalization'
 
 export type CloudStatus = 'guest' | 'loading' | 'synced' | 'syncing' | 'error'
+export type UserProfile = { displayName: string; email: string; timezone: string }
 const importedKey = (userId: string) => `doneday-cloud-imported:${userId}`
 const snapshot = (data: AppData) => JSON.stringify(data)
 const cloudId = (userId: string, localId: string) => `${userId}:${localId}`
@@ -51,6 +53,7 @@ export async function uploadCloudData(userId: string, data: AppData) {
 export function useCloudSync(data: AppData, setData: Dispatch<SetStateAction<AppData>>) {
   const [status, setStatus] = useState<CloudStatus>(cloudConfigured ? 'loading' : 'guest')
   const [userId, setUserId] = useState<string | null>(null)
+  const [profile, setProfile] = useState<UserProfile>({ displayName: '', email: '', timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' })
   const last = useRef('')
   const initialised = useRef(false)
 
@@ -58,19 +61,27 @@ export function useCloudSync(data: AppData, setData: Dispatch<SetStateAction<App
     if (!supabase) return
     const client = supabase
     let active = true
+    const loadProfile = async (id: string) => {
+      const [{ data: auth }, { data: row }] = await Promise.all([client.auth.getUser(), client.from('profiles').select('display_name, timezone').eq('id', id).maybeSingle()])
+      if (!active) return
+      setProfile({ displayName: cleanDisplayName(row?.display_name) || cleanDisplayName(auth.user?.user_metadata.display_name), email: auth.user?.email ?? '', timezone: row?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' })
+    }
     const load = async () => {
       const { data: auth } = await client.auth.getUser()
       if (!active) return
       setUserId(auth.user?.id ?? null)
-      if (auth.user) void client.from('profiles').upsert({ id: auth.user.id, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', updated_at: new Date().toISOString() }, { onConflict: 'id' })
+      if (auth.user) { void client.from('profiles').upsert({ id: auth.user.id, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', updated_at: new Date().toISOString() }, { onConflict: 'id' }); void loadProfile(auth.user.id) }
       setStatus(auth.user ? 'loading' : 'guest')
     }
     void load()
     const { data: listener } = client.auth.onAuthStateChange((_event, session) => {
       initialised.current = false; last.current = ''
       setUserId(session?.user.id ?? null); setStatus(session?.user ? 'loading' : 'guest')
+      if (session?.user) void loadProfile(session.user.id); else setProfile({ displayName: '', email: '', timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' })
     })
-    return () => { active = false; listener.subscription.unsubscribe() }
+    const refresh = () => { if (userId) void loadProfile(userId); else void client.auth.getUser().then(({ data }) => { if (data.user) void loadProfile(data.user.id) }) }
+    window.addEventListener('doneday-profile-updated', refresh)
+    return () => { active = false; listener.subscription.unsubscribe(); window.removeEventListener('doneday-profile-updated', refresh) }
   }, [])
 
   useEffect(() => {
@@ -92,6 +103,16 @@ export function useCloudSync(data: AppData, setData: Dispatch<SetStateAction<App
   }, [userId, data.tasks.length, data.birthdays.length, data.routines.length, setData])
 
   useEffect(() => {
+    if (!supabase || !userId) return
+    const client = supabase
+    const channel = client.channel(`doneday-profile-${userId}`).on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` }, payload => {
+      const next = payload.new as { display_name?: unknown; timezone?: unknown }
+      setProfile(current => ({ ...current, displayName: cleanDisplayName(next.display_name) || current.displayName, timezone: typeof next.timezone === 'string' && next.timezone ? next.timezone : current.timezone }))
+    }).subscribe()
+    return () => { void client.removeChannel(channel) }
+  }, [userId])
+
+  useEffect(() => {
     if (!supabase || !userId || !initialised.current || status === 'error') return
     const next = snapshot(data)
     if (next === last.current) return
@@ -106,5 +127,5 @@ export function useCloudSync(data: AppData, setData: Dispatch<SetStateAction<App
     if (!userId) return
     setStatus('syncing'); await uploadCloudData(userId, data); localStorage.setItem(importedKey(userId), 'true'); last.current = snapshot(data); setStatus('synced')
   }
-  return { status, userId, importLocal }
+  return { status, userId, profile, importLocal }
 }

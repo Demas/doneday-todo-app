@@ -18,7 +18,7 @@ export type AppData = { version: 2; tasks: Task[]; categories: Category[]; birth
 export const DEFAULT_CATEGORIES: Category[] = [
   { id: 'personal', name: 'Personal', color: '#facc15' }, { id: 'work', name: 'Work', color: '#7c9cf5' },
   { id: 'shopping', name: 'Shopping', color: '#f4a261' }, { id: 'study', name: 'Study', color: '#a78bfa' },
-  { id: 'other', name: 'Other', color: '#94a3b8' },
+  { id: 'meetings', name: 'Meetings', color: '#ef4444' }, { id: 'other', name: 'Other', color: '#94a3b8' },
 ]
 export const DEFAULT_SETTINGS: AppSettings = { density: 'comfortable', confirmDelete: false, reminders: false, sound: true, leapDayPolicy: 'feb28' }
 export const DEFAULT_DATA: AppData = { version: 2, tasks: [], categories: DEFAULT_CATEGORIES, birthdays: [], routines: [], settings: DEFAULT_SETTINGS }
