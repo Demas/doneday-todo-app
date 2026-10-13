@@ -1,9 +1,10 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../src/App'
 import { addDays, createTask, DEFAULT_DATA, localDate } from '../src/domain'
 
 describe('DoneDay task workflow', () => {
+  beforeEach(() => localStorage.setItem('doneday-welcome-choice', 'guest'))
   it('quick-adds a task, marks it complete, and keeps it visible on the dashboard', () => {
     render(<App />)
     fireEvent.change(screen.getByRole('textbox', { name: 'Quick add task' }), { target: { value: 'Send the proposal' } })
@@ -275,7 +276,7 @@ describe('DoneDay task workflow', () => {
 
   it('keeps guest mode available and explains that cloud setup is optional', () => {
     render(<App />)
-    fireEvent.click(screen.getByRole('button', { name: 'Account and cloud sync' }))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Sign in or create a DoneDay account' })[0])
     expect(screen.getByRole('dialog')).toHaveTextContent('Keep using DoneDay as a guest')
     expect(screen.getByText(/VITE_SUPABASE_URL/)).toBeInTheDocument()
   })

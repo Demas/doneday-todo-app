@@ -6,9 +6,8 @@ import { useReminderScheduler, type DueReminder } from './reminders'
 import { useCloudSync } from './cloud'
 import { CloudAccount } from './CloudAccount'
 import { PushSetup } from './PushSetup'
-import { greetingFor, shouldShowWelcome } from './personalization'
+import { greetingFor, hasMeaningfulLocalData, shouldShowWelcome } from './personalization'
 import { WelcomeScreen } from './WelcomeScreen'
-import { cloudConfigured } from './supabase'
 
 type View = 'dashboard' | 'all' | 'today' | 'upcoming' | 'overdue' | 'completed' | 'categories' | 'planner' | 'birthdays' | 'reminders' | 'settings'
 const viewLabels: Record<View, string> = { dashboard: 'Dashboard', all: 'My Tasks', today: 'Today', upcoming: 'Upcoming', overdue: 'Overdue', completed: 'Completed', categories: 'Lists', planner: 'Daily Planner', birthdays: 'Birthdays', reminders: 'Reminders', settings: 'Settings' }
@@ -16,10 +15,19 @@ const iconFor: Record<View, typeof LayoutDashboard> = { dashboard: LayoutDashboa
 const fmtDate = (iso: string) => { if (!iso) return ''; const today = localDate(); if (iso === today) return 'Today'; if (iso === addDays(today, 1)) return 'Tomorrow'; return new Date(`${iso}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) }
 
 function useAppData() {
-  const [data, setData] = useState(() => { try { const raw = localStorage.getItem(STORAGE_KEY); return raw ? parseData(raw) : DEFAULT_DATA } catch { return DEFAULT_DATA } })
+  const [initial] = useState(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY)
+      const data = raw ? parseData(raw) : DEFAULT_DATA
+      return { data, hasMeaningfulLocalData: hasMeaningfulLocalData(data) }
+    } catch {
+      return { data: DEFAULT_DATA, hasMeaningfulLocalData: false }
+    }
+  })
+  const [data, setData] = useState(initial.data)
   const [storageError, setStorageError] = useState('')
   useEffect(() => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); setStorageError('') } catch { setStorageError('Could not save your changes. Your browser storage may be full.') } }, [data])
-  return { data, setData, storageError }
+  return { data, setData, storageError, hasMeaningfulLocalData: initial.hasMeaningfulLocalData }
 }
 
 function TaskEditor({ task, categories, onClose, onSave }: { task: Task | null; categories: Category[]; onClose: () => void; onSave: (task: Task) => void }) {
@@ -61,10 +69,9 @@ function TaskEditor({ task, categories, onClose, onSave }: { task: Task | null; 
 }
 
 function App() {
-  const { data, setData, storageError } = useAppData()
+  const { data, setData, storageError, hasMeaningfulLocalData: hasExistingLocalData } = useAppData()
   const cloud = useCloudSync(data, setData)
   const [guestChoice, setGuestChoice] = useState(() => localStorage.getItem('doneday-welcome-choice') === 'guest')
-  const [hasExistingLocalData] = useState(() => Boolean(localStorage.getItem(STORAGE_KEY)))
   const [view, setView] = useState<View>('dashboard')
   const [categoryView, setCategoryView] = useState('')
   const [query, setQuery] = useState('')
@@ -126,7 +133,8 @@ function App() {
   }
   const importData = async (file?: File) => { if (!file) return; try { const incoming = parseData(await file.text()); if (data.tasks.length && !window.confirm(`Import ${incoming.tasks.length} tasks and ${incoming.categories.length} lists? This will replace current data.`)) return; setData(incoming); setImportError(''); say('Backup imported') } catch (e) { setImportError(e instanceof Error ? e.message : 'Could not read this file.') } finally { if (fileRef.current) fileRef.current.value = '' } }
 
-  const firstVisit = shouldShowWelcome({ cloudReady: cloudConfigured, isGuest: cloud.status === 'guest', hasUser: Boolean(cloud.userId), hasGuestChoice: guestChoice, hasExistingLocalData })
+  if (!cloud.authReady) return <main className="welcome-screen" aria-busy="true"><section className="welcome-card welcome-loading" role="status">Loading your DoneDay…</section></main>
+  const firstVisit = shouldShowWelcome({ authReady: cloud.authReady, hasUser: Boolean(cloud.userId), hasGuestChoice: guestChoice, hasExistingLocalData })
   if (firstVisit) return <><WelcomeScreen onCreateAccount={() => window.dispatchEvent(new CustomEvent('doneday-account-open', { detail: 'sign-up' }))} onSignIn={() => window.dispatchEvent(new CustomEvent('doneday-account-open', { detail: 'sign-in' }))} onContinueGuest={() => { localStorage.setItem('doneday-welcome-choice', 'guest'); setGuestChoice(true) }}/><CloudAccount status={cloud.status} userId={cloud.userId} syncIssue={cloud.syncIssue} onImport={cloud.importLocal} onRetry={cloud.retry} showTrigger={false}/></>
   const dashboardGreeting = greetingFor(new Date(), cloud.profile.displayName)
 

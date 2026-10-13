@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { greetingFor, initialsFor, shouldShowWelcome } from '../src/personalization'
+import { greetingFor, hasMeaningfulLocalData, initialsFor, shouldShowWelcome } from '../src/personalization'
+import { createTask, DEFAULT_DATA } from '../src/domain'
 import { WelcomeScreen } from '../src/WelcomeScreen'
 
 describe('personalized DoneDay experience', () => {
@@ -11,9 +12,25 @@ describe('personalized DoneDay experience', () => {
     expect(greetingFor(new Date(2026, 9, 13, 9), '')).toBe('Good morning! ☀️')
     expect(greetingFor(new Date(2026, 9, 13, 9), '  ')).not.toContain('undefined')
     expect(initialsFor('Dimas Ade', '')).toBe('DA')
-    expect(shouldShowWelcome({ cloudReady: true, isGuest: true, hasUser: false, hasGuestChoice: false, hasExistingLocalData: false })).toBe(true)
-    expect(shouldShowWelcome({ cloudReady: true, isGuest: true, hasUser: false, hasGuestChoice: true, hasExistingLocalData: false })).toBe(false)
-    expect(shouldShowWelcome({ cloudReady: true, isGuest: false, hasUser: true, hasGuestChoice: false, hasExistingLocalData: false })).toBe(false)
+    expect(shouldShowWelcome({ authReady: true, hasUser: false, hasGuestChoice: false, hasExistingLocalData: false })).toBe(true)
+    expect(shouldShowWelcome({ authReady: true, hasUser: false, hasGuestChoice: true, hasExistingLocalData: false })).toBe(false)
+    expect(shouldShowWelcome({ authReady: true, hasUser: true, hasGuestChoice: false, hasExistingLocalData: false })).toBe(false)
+    expect(shouldShowWelcome({ authReady: false, hasUser: false, hasGuestChoice: false, hasExistingLocalData: false })).toBe(false)
+  })
+
+  it('distinguishes automatic empty storage from guest work and honors the saved onboarding choice', () => {
+    // New installations and the default object written after their first render both show onboarding.
+    expect(hasMeaningfulLocalData(DEFAULT_DATA)).toBe(false)
+    expect(shouldShowWelcome({ authReady: true, hasUser: false, hasGuestChoice: false, hasExistingLocalData: hasMeaningfulLocalData(DEFAULT_DATA) })).toBe(true)
+
+    // Existing tasks remain available without forcing a guest through onboarding again.
+    const guestData = { ...DEFAULT_DATA, tasks: [createTask({ title: 'Keep my local task' })] }
+    expect(hasMeaningfulLocalData(guestData)).toBe(true)
+    expect(shouldShowWelcome({ authReady: true, hasUser: false, hasGuestChoice: false, hasExistingLocalData: hasMeaningfulLocalData(guestData) })).toBe(false)
+
+    // Returning guests and authenticated users both bypass the welcome screen once known.
+    expect(shouldShowWelcome({ authReady: true, hasUser: false, hasGuestChoice: true, hasExistingLocalData: false })).toBe(false)
+    expect(shouldShowWelcome({ authReady: true, hasUser: true, hasGuestChoice: false, hasExistingLocalData: false })).toBe(false)
   })
 
   it('shows all first-visit actions and remembers the chosen action through callbacks', () => {

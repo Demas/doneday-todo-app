@@ -119,6 +119,7 @@ export async function uploadCloudData(userId: string, data: AppData, previous: A
 
 export function useCloudSync(data: AppData, setData: Dispatch<SetStateAction<AppData>>) {
   const [status, setStatus] = useState<CloudStatus>(cloudConfigured ? 'loading' : 'guest')
+  const [authReady, setAuthReady] = useState(!cloudConfigured)
   const [userId, setUserId] = useState<string | null>(null)
   const [profile, setProfile] = useState<UserProfile>({ displayName: '', email: '', timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' })
   const [syncIssue, setSyncIssue] = useState<CloudSyncIssue | null>(null)
@@ -129,7 +130,7 @@ export function useCloudSync(data: AppData, setData: Dispatch<SetStateAction<App
   const initialised = useRef(false)
 
   useEffect(() => {
-    if (!supabase) return
+    if (!supabase) { setAuthReady(true); return }
     const client = supabase
     let active = true
     const loadProfile = async (id: string) => {
@@ -139,17 +140,32 @@ export function useCloudSync(data: AppData, setData: Dispatch<SetStateAction<App
       setProfile({ displayName: cleanDisplayName(row?.display_name) || cleanDisplayName(auth.user?.user_metadata.display_name), email: auth.user?.email ?? '', timezone: row?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' })
     }
     const load = async () => {
-      const { data: auth, error } = await client.auth.getUser()
-      if (!active) return
-      if (error) { setSyncIssue(describeCloudError(cloudError('check your session', error))); setStatus('error'); return }
-      setUserId(auth.user?.id ?? null)
-      if (auth.user) { void client.from('profiles').upsert({ id: auth.user.id, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', updated_at: new Date().toISOString() }, { onConflict: 'id' }).then(({ error: profileError }) => { if (profileError && active) { setSyncIssue(describeCloudError(cloudError('create your profile', profileError))); setStatus('error') } }); void loadProfile(auth.user.id) }
-      setStatus(auth.user ? 'loading' : 'guest')
+      try {
+        const { data: auth, error } = await client.auth.getUser()
+        if (!active) return
+        if (error) {
+          setSyncIssue(describeCloudError(cloudError('check your session', error)))
+          setUserId(null); setStatus('guest'); setAuthReady(true)
+          return
+        }
+        setUserId(auth.user?.id ?? null)
+        if (auth.user) {
+          void client.from('profiles').upsert({ id: auth.user.id, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', updated_at: new Date().toISOString() }, { onConflict: 'id' }).then(({ error: profileError }) => {
+            if (profileError && active) setSyncIssue(describeCloudError(cloudError('create your profile', profileError)))
+          })
+          void loadProfile(auth.user.id)
+        }
+        setStatus(auth.user ? 'loading' : 'guest'); setAuthReady(true)
+      } catch (error) {
+        if (!active) return
+        setSyncIssue(describeCloudError(cloudError('check your session', error)))
+        setUserId(null); setStatus('guest'); setAuthReady(true)
+      }
     }
     void load()
     const { data: listener } = client.auth.onAuthStateChange((_event, session) => {
       initialised.current = false; last.current = ''; lastSyncedData.current = null; setSyncIssue(null); setImportRequired(false)
-      setUserId(session?.user.id ?? null); setStatus(session?.user ? 'loading' : 'guest')
+      setUserId(session?.user.id ?? null); setStatus(session?.user ? 'loading' : 'guest'); setAuthReady(true)
       if (session?.user) void loadProfile(session.user.id); else setProfile({ displayName: '', email: '', timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' })
     })
     const refresh = () => { if (userId) void loadProfile(userId); else void client.auth.getUser().then(({ data }) => { if (data.user) void loadProfile(data.user.id) }) }
@@ -207,5 +223,5 @@ export function useCloudSync(data: AppData, setData: Dispatch<SetStateAction<App
     catch (error) { setSyncIssue(describeCloudError(error)); setStatus('error'); throw error }
   }
   const retry = () => { if (!userId || status === 'syncing') return; initialised.current = false; setSyncIssue(null); setStatus('loading'); setRetryVersion(version => version + 1) }
-  return { status, userId, profile, syncIssue, importLocal, retry }
+  return { status, authReady, userId, profile, syncIssue, importLocal, retry }
 }

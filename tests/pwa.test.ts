@@ -12,4 +12,11 @@ describe('PWA shell', () => {
     expect(worker).toContain("addEventListener('push'")
     expect(worker).toContain("addEventListener('notificationclick'")
   })
+
+  it('keeps onboarding independent of standalone PWA storage initialization', async () => {
+    const { DEFAULT_DATA } = await import('../src/domain')
+    const { hasMeaningfulLocalData, shouldShowWelcome } = await import('../src/personalization')
+    expect(hasMeaningfulLocalData(DEFAULT_DATA)).toBe(false)
+    expect(shouldShowWelcome({ authReady: true, hasUser: false, hasGuestChoice: false, hasExistingLocalData: false })).toBe(true)
+  })
 })
