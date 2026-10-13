@@ -25,8 +25,33 @@ export async function disablePushForDevice() {
   const subscription = await registration?.pushManager.getSubscription()
   if (subscription) { await supabase.from('push_subscriptions').delete().eq('endpoint', subscription.endpoint); await subscription.unsubscribe() }
 }
-export async function sendPushTest() {
+type PushFunctionResult = { code?: string; message?: string; sent?: number }
+
+async function functionErrorMessage(error: unknown) {
+  const candidate = error as { context?: unknown; message?: unknown }
+  const response = candidate?.context
+  if (response instanceof Response) {
+    try {
+      const body = await response.clone().json() as PushFunctionResult
+      if (body.code === 'UNAUTHORIZED') return 'Your session has expired. Sign in again before sending a test notification.'
+      if (body.code === 'NO_SUBSCRIPTIONS') return 'No devices are registered for background push. Select Enable push on this device first.'
+      if (body.code === 'PUSH_DELIVERY_FAILED') return 'DoneDay reached your registered device, but the push service did not accept the notification.'
+      if (body.code === 'PUSH_NOT_CONFIGURED') return 'DoneDay push delivery has not been configured on the server.'
+      if (typeof body.message === 'string' && body.message) return body.message
+    } catch { /* Use the status below when the response has no JSON body. */ }
+    if (response.status === 401) return 'Your session has expired. Sign in again before sending a test notification.'
+    if (response.status === 404) return 'No devices are registered for background push. Select Enable push on this device first.'
+    if (response.status >= 500) return 'DoneDay could not send the test notification. Retry in a moment.'
+  }
+  const message = typeof candidate?.message === 'string' ? candidate.message : ''
+  if (/failed to send a request|fetch|network|cors/i.test(message)) return 'DoneDay could not reach the notification service. Check your connection or browser CORS settings, then retry.'
+  return 'DoneDay could not send the test notification. Retry in a moment.'
+}
+
+export async function sendPushTest(): Promise<string> {
   if (!supabase) throw new Error('Cloud setup is incomplete.')
-  const { error } = await supabase.functions.invoke('send-test-push')
-  if (error) throw error
+  const { data, error } = await supabase.functions.invoke<PushFunctionResult>('send-test-push')
+  if (error) throw new Error(await functionErrorMessage(error))
+  if (data?.code !== 'PUSH_DISPATCHED') throw new Error(data?.message || 'DoneDay could not send the test notification. Retry in a moment.')
+  return data.message || `Test notification dispatched to ${data.sent ?? 0} device${data.sent === 1 ? '' : 's'}.`
 }

@@ -1,10 +1,10 @@
-project_id = "doneday-todo-app"
+project_id = "yccyogdfwtisxgryfvik"
 
 [functions.reminder-dispatch]
 verify_jwt = false
 
 [functions.send-test-push]
-verify_jwt = true
+verify_jwt = false
 
 [functions.delete-account]
 verify_jwt = true
