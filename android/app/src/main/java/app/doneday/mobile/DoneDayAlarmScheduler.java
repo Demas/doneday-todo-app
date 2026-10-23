@@ -26,7 +26,9 @@ public final class DoneDayAlarmScheduler {
     static void sync(Context context, JSArray alarms) throws Exception {
         cancelStored(context);
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(STORED, alarms.toString()).apply();
-        for (int index = 0; index < alarms.length(); index++) schedule(context, alarms.getJSONObject(index));
+        for (int index = 0; index < alarms.length(); index++) {
+            schedule(context, JSObject.fromJSONObject(alarms.getJSONObject(index)));
+        }
     }
 
     static void scheduleTest(Context context, JSObject test) throws Exception {
