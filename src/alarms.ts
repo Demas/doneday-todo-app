@@ -6,6 +6,7 @@ export type AlarmCapability = {
   platform: 'android' | 'ios' | 'web'
   smartAlarms: boolean
   exactAlarms: boolean
+  fullScreenIntents: boolean
   notificationPermission: 'granted' | 'denied' | 'prompt' | 'unavailable'
   message: string
 }
@@ -36,6 +37,7 @@ const deviceTimezone = () => Intl.DateTimeFormat().resolvedOptions().timeZone ||
 
 export const webAlarmCapability = (): AlarmCapability => ({
   platform: 'web', smartAlarms: false, exactAlarms: false,
+  fullScreenIntents: false,
   notificationPermission: typeof Notification === 'undefined' ? 'unavailable' : Notification.permission === 'default' ? 'prompt' : Notification.permission,
   message: 'Smart Alarms need the DoneDay Android app. Web notifications cannot keep ringing after a browser is closed.',
 })
@@ -44,6 +46,7 @@ export async function alarmCapability(): Promise<AlarmCapability> {
   if (!Capacitor.isNativePlatform()) return webAlarmCapability()
   if (Capacitor.getPlatform() === 'ios') return {
     platform: 'ios', smartAlarms: false, exactAlarms: false, notificationPermission: 'unavailable',
+    fullScreenIntents: false,
     message: 'AlarmKit support requires the iOS native target and an iOS 26+ device. This build uses notification fallback until that target is validated.',
   }
   try { return await NativeAlarms.getCapabilities() } catch { return { ...webAlarmCapability(), platform: 'android', message: 'Native alarm support is unavailable in this Android build.' } }

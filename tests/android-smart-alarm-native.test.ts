@@ -23,4 +23,14 @@ describe('Android Smart Alarm native workflow', () => {
     expect(activity).toContain('stopAlarm();')
     expect(activity).toContain('registerReceiver(actionReceiver, filter')
   })
+
+  it('uses the selected Android alarm tone and keeps inexact and full-screen permission states visible', () => {
+    const receiver = nativeSource('DoneDayAlarmReceiver.java')
+    const plugin = nativeSource('DoneDayAlarmPlugin.java')
+    expect(receiver).toContain('CHANNEL_PREFIX + ("notification".equals(ringtone) || "ringtone".equals(ringtone) ? ringtone : "alarm")')
+    expect(receiver).toContain('alarmChannel.setSound(DoneDayAlarmScheduler.ringtoneUri(alarm)')
+    expect(plugin).toContain('result.put("smartAlarms", notifications)')
+    expect(plugin).toContain('result.put("fullScreenIntents", fullScreen)')
+    expect(plugin).toContain('Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT')
+  })
 })
