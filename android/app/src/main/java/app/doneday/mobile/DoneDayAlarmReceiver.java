@@ -6,7 +6,6 @@ import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.media.RingtoneManager;
 import android.os.Build;
 
 import androidx.core.app.NotificationCompat;
@@ -43,7 +42,7 @@ public class DoneDayAlarmReceiver extends BroadcastReceiver {
             .setOngoing(true)
             .setContentIntent(fullScreen)
             .setFullScreenIntent(fullScreen, true)
-            .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM))
+            .setSound(DoneDayAlarmScheduler.ringtoneUri(alarm))
             .addAction(0, "Snooze", PendingIntent.getBroadcast(context, id.hashCode() + 1, snooze, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE))
             .addAction(0, "Stop", PendingIntent.getBroadcast(context, id.hashCode() + 2, stop, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE));
         NotificationManagerCompat.from(context).notify(id.hashCode(), notice.build());

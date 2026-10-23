@@ -4,6 +4,8 @@ import android.app.AlarmManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.media.RingtoneManager;
+import android.net.Uri;
 import android.os.Build;
 
 import com.getcapacitor.JSArray;
@@ -18,8 +20,11 @@ import java.util.TimeZone;
 public final class DoneDayAlarmScheduler {
     static final String PREFS = "doneday_smart_alarms";
     static final String STORED = "definitions";
+    static final String TEMPORARY = "temporary_definitions";
     static final String EXTRA_ID = "alarm_id";
     static final String ACTION_RING = "app.doneday.mobile.RING";
+    static final String ACTION_DISMISS_RINGING = "app.doneday.mobile.DISMISS_RINGING";
+    private static final long TEST_ALARM_LIFETIME_MS = 60 * 60 * 1000L;
 
     private DoneDayAlarmScheduler() {}
 
@@ -45,6 +50,9 @@ public final class DoneDayAlarmScheduler {
         alarm.put("ringtone", test.getString("ringtone", "alarm"));
         alarm.put("vibrate", test.getBoolean("vibrate", true));
         alarm.put("snoozeMinutes", test.getInteger("snoozeMinutes", 10));
+        alarm.put("temporary", true);
+        alarm.put("expiresAt", System.currentTimeMillis() + TEST_ALARM_LIFETIME_MS);
+        storeTemporary(context, alarm);
         scheduleAt(context, alarm, System.currentTimeMillis() + 5000L);
     }
 
@@ -63,8 +71,27 @@ public final class DoneDayAlarmScheduler {
         } catch (Exception ignored) { }
     }
 
+    /** Removes a completed test alarm without changing the user's saved alarm definitions. */
+    static void dismiss(Context context, String id) {
+        try {
+            if (removeTemporary(context, id)) cancel(context, id);
+        } catch (Exception ignored) { }
+    }
+
     static JSObject find(Context context, String id) throws Exception {
-        String saved = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(STORED, "[]");
+        JSObject savedAlarm = findIn(context, STORED, id);
+        return savedAlarm != null ? savedAlarm : findIn(context, TEMPORARY, id);
+    }
+
+    static Uri ringtoneUri(JSObject alarm) {
+        String ringtone = alarm.getString("ringtone", "alarm");
+        if ("notification".equals(ringtone)) return RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+        if ("ringtone".equals(ringtone)) return RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE);
+        return RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
+    }
+
+    private static JSObject findIn(Context context, String key, String id) throws Exception {
+        String saved = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(key, "[]");
         JSONArray alarms = new JSONArray(saved);
         for (int index = 0; index < alarms.length(); index++) {
             JSONObject value = alarms.getJSONObject(index);
@@ -77,6 +104,44 @@ public final class DoneDayAlarmScheduler {
         String saved = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(STORED, "[]");
         JSONArray alarms = new JSONArray(saved);
         for (int index = 0; index < alarms.length(); index++) cancel(context, alarms.getJSONObject(index).optString("id"));
+    }
+
+    private static void storeTemporary(Context context, JSObject alarm) throws Exception {
+        JSONArray current = new JSONArray(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(TEMPORARY, "[]"));
+        JSONArray retained = new JSONArray();
+        long now = System.currentTimeMillis();
+        String id = alarm.getString("id");
+        for (int index = 0; index < current.length(); index++) {
+            JSONObject value = current.getJSONObject(index);
+            String existingId = value.optString("id");
+            if (id.equals(existingId) || value.optLong("expiresAt", Long.MAX_VALUE) <= now) {
+                cancel(context, existingId);
+            } else {
+                retained.put(value);
+            }
+        }
+        retained.put(new JSONObject(alarm.toString()));
+        if (!context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(TEMPORARY, retained.toString()).commit()) {
+            throw new IllegalStateException("DoneDay could not save the Smart Alarm test.");
+        }
+    }
+
+    private static boolean removeTemporary(Context context, String id) throws Exception {
+        JSONArray current = new JSONArray(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(TEMPORARY, "[]"));
+        JSONArray retained = new JSONArray();
+        boolean removed = false;
+        for (int index = 0; index < current.length(); index++) {
+            JSONObject value = current.getJSONObject(index);
+            if (id.equals(value.optString("id"))) {
+                removed = true;
+            } else {
+                retained.put(value);
+            }
+        }
+        if (removed && !context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(TEMPORARY, retained.toString()).commit()) {
+            throw new IllegalStateException("DoneDay could not clear the Smart Alarm test.");
+        }
+        return removed;
     }
 
     static void cancel(Context context, String id) {
