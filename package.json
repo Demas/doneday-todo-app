@@ -7,15 +7,21 @@
     "dev": "vite --configLoader native --host 0.0.0.0",
     "build": "tsc -b && vite build --configLoader native",
     "test": "vitest run",
-    "preview": "vite preview --configLoader native --host 0.0.0.0"
+    "preview": "vite preview --configLoader native --host 0.0.0.0",
+    "android:sync": "npm run build && cap sync android",
+    "android:open": "cap open android",
+    "android:debug": "npm run android:sync && cd android && gradlew.bat :app:assembleDebug"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/core": "^8.5.3",
     "@supabase/supabase-js": "^2.98.0",
     "lucide-react": "^0.468.0",
     "react": "latest",
     "react-dom": "latest"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.5.3",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",
     "@types/node": "^22.10.5",

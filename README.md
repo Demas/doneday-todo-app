@@ -83,6 +83,35 @@ Push is not tested or claimed to be active until those provider steps are comple
 
 The service worker caches only navigation documents for an offline fallback. It does not cache Supabase API responses or authenticated private data.
 
+## Smart Alarm architecture (DoneDay 4.0)
+
+DoneDay now includes an opt-in **Smart Alarm** definition for timed tasks and birthdays. Alarm definitions live in the existing task and birthday data payloads, so authenticated users sync them with the same Supabase records already used for tasks and birthdays. Each authorized device independently turns those definitions into local schedules; device schedules and permissions are never synced or shared.
+
+| Platform | Current behavior |
+| --- | --- |
+| Android app | Capacitor native bridge schedules opt-in alarms with `AlarmManager`. When Android grants exact-alarm and notification access, it uses an exact wake-up alarm, a high-priority alarm notification, a lock-screen capable alarm activity, vibration, Stop, Snooze, repeat scheduling, and reboot/timezone rescheduling. |
+| iPhone iOS 26+ | The web app does not claim AlarmKit support. A native iOS target, current AlarmKit entitlement/API review, Xcode build, and physical-device validation are still required. |
+| Earlier iPhone/iPad | Use regular local-notification behavior when an iOS target is added. Continuous Clock-style ringing is unavailable. |
+| Web/PWA | DoneDay uses regular notifications and existing Web Push where configured. A browser cannot guarantee continuous ringing while closed. |
+
+### Android development
+
+The Capacitor Android host lives in `android/`. Its local `DoneDayAlarm` bridge keeps only enabled Smart Alarm definitions scheduled on that device. Updating, completing, or deleting a task updates the shared data and the bridge removes stale device schedules on the next reconciliation. No service-role or VAPID secrets are included in the app.
+
+Install **JDK 21** and Android Studio with Android SDK Platform 36, then set `JAVA_HOME` and ensure `java` is on `PATH`. Build and open the native app with:
+
+```bash
+npm run android:sync
+npm run android:debug
+npm run android:open
+```
+
+On a physical Android device, choose **Smart Alarm** while editing a timed task or birthday, enable it, then select **Allow Smart Alarms**. Android may ask for notification permission and special exact-alarm access. DoneDay requests `SCHEDULE_EXACT_ALARM`, notification, vibration, reboot-rescheduling, and full-screen intent access only for the Smart Alarm feature. Google Play release review must confirm that the final app continues to qualify for its full-screen alarm use case.
+
+### Smart Alarm validation still required
+
+The native code has not been built or exercised on this workstation because no JDK is installed. Before store submission, test on physical devices with the app open, closed, and locked; denied permissions; battery-saving modes; reboot; time-zone/DST changes; Stop/Snooze; repeated schedules; editing/deleting/completing tasks; duplicate prevention; offline operation; and multiple devices. Test iOS AlarmKit separately on compatible hardware before describing it as available.
+
 ## Vercel deployment
 
 Keep the existing Vercel project and domain. Use the **Vite** preset, build command `npm run build`, and output directory `dist`. Configure public Supabase and VAPID values as Vercel environment variables; configure all privileged values only in Supabase Edge Function secrets.

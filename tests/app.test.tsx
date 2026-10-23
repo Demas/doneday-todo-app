@@ -274,6 +274,18 @@ describe('DoneDay task workflow', () => {
     expect(screen.getByText('Sarah')).toBeInTheDocument()
   })
 
+  it('stores an explicit Smart Alarm definition without claiming web clock behavior', () => {
+    render(<App />)
+    fireEvent.click(document.querySelector('.header-add')!)
+    fireEvent.change(screen.getByLabelText('Task name'), { target: { value: 'Call the client' } })
+    fireEvent.change(screen.getByLabelText('Due date'), { target: { value: addDays(localDate(), 1) } })
+    fireEvent.change(screen.getByLabelText('Time'), { target: { value: '09:00' } })
+    fireEvent.change(screen.getByLabelText('Alarm mode'), { target: { value: 'smart' } })
+    expect(screen.getByText(/cannot keep ringing after a browser is closed/i)).toBeInTheDocument()
+    fireEvent.click(document.querySelector('.dialog .btn.primary')!)
+    expect(localStorage.getItem('doneday-v1')).toContain('"mode":"smart"')
+  })
+
   it('keeps guest mode available and explains that cloud setup is optional', () => {
     render(<App />)
     fireEvent.click(screen.getAllByRole('button', { name: 'Sign in or create a DoneDay account' })[0])

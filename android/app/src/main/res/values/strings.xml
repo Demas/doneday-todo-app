@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">DoneDay</string>
+    <string name="title_activity_main">DoneDay</string>
+    <string name="package_name">app.doneday.mobile</string>
+    <string name="custom_url_scheme">app.doneday.mobile</string>
+</resources>
