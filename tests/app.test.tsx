@@ -274,6 +274,19 @@ describe('DoneDay task workflow', () => {
     expect(screen.getByText('Sarah')).toBeInTheDocument()
   })
 
+  it('offers only the three supported birthday reminder offsets and can disable them all', () => {
+    render(<App />)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Birthdays' })[0])
+    expect(screen.getByRole('checkbox', { name: '3 days before' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: '1 day before' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'On the birthday' })).toBeChecked()
+    expect(screen.queryByLabelText(/7 days before/i)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('checkbox', { name: '3 days before' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: '1 day before' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'On the birthday' }))
+    expect(screen.getByLabelText('Birthday reminder time')).toBeDisabled()
+  })
+
   it('stores an explicit Smart Alarm definition without claiming web clock behavior', () => {
     render(<App />)
     fireEvent.click(document.querySelector('.header-add')!)

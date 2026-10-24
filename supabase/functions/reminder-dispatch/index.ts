@@ -47,7 +47,7 @@ Deno.serve(async request => {
       let delivered = 0
       for (const subscription of subscriptions ?? []) {
         try {
-          await webpush.sendNotification({ endpoint: subscription.endpoint, keys: { p256dh: subscription.p256dh, auth: subscription.auth } }, JSON.stringify({ id: schedule.id, title: 'DoneDay Reminder', body: schedule.payload?.body || 'You have a scheduled reminder.', url: schedule.payload?.url || '/' }))
+          await webpush.sendNotification({ endpoint: subscription.endpoint, keys: { p256dh: subscription.p256dh, auth: subscription.auth } }, JSON.stringify({ id: schedule.id, title: schedule.payload?.title || 'DoneDay Reminder', body: schedule.payload?.body || 'You have a scheduled reminder.', url: schedule.payload?.url || '/' }))
           delivered++; await admin.from('notification_deliveries').upsert({ schedule_id: schedule.id, endpoint: subscription.endpoint, state: 'sent' }, { onConflict: 'schedule_id,endpoint' })
         } catch (deliveryError) {
           const status = Number((deliveryError as { statusCode?: number }).statusCode || 0)
@@ -56,6 +56,10 @@ Deno.serve(async request => {
         }
       }
       await admin.from('reminder_schedules').update({ status: delivered ? 'sent' : (locked.attempts >= 3 ? 'failed' : 'pending'), sent_at: delivered ? new Date().toISOString() : null, updated_at: new Date().toISOString() }).eq('id', schedule.id)
+      if (delivered && schedule.birthday_id) {
+        const { error: replenishError } = await admin.rpc('rebuild_birthday_reminders', { p_birthday_id: schedule.birthday_id })
+        if (replenishError) console.error('DoneDay birthday schedule replenish failed', { code: replenishError.code, message: replenishError.message })
+      }
       processed++
     }
     return json(request, { code: 'REMINDERS_DISPATCHED', processed })
