@@ -10,7 +10,12 @@ set data = jsonb_set(
     select jsonb_agg(offset order by case offset when 3 then 1 when 1 then 2 else 3 end)
     from (
       select distinct value::integer as offset
-      from jsonb_array_elements_text(data -> 'reminderOffsets')
+      from jsonb_array_elements_text(
+        case when jsonb_typeof(data -> 'reminderOffsets') = 'array'
+          then data -> 'reminderOffsets'
+          else '[]'::jsonb
+        end
+      )
       where value in ('0', '1', '3')
     ) selected_offsets
   ), '[]'::jsonb),
@@ -18,7 +23,12 @@ set data = jsonb_set(
 ), updated_at = now()
 where jsonb_typeof(data -> 'reminderOffsets') = 'array'
   and exists (
-    select 1 from jsonb_array_elements_text(data -> 'reminderOffsets') as old_offset(value)
+    select 1 from jsonb_array_elements_text(
+      case when jsonb_typeof(data -> 'reminderOffsets') = 'array'
+        then data -> 'reminderOffsets'
+        else '[]'::jsonb
+      end
+    ) as old_offset(value)
     where old_offset.value = '7'
   );
 
@@ -87,7 +97,12 @@ begin
 
     for v_offset in
       select distinct value::integer
-      from jsonb_array_elements_text(coalesce(v_birthday.data -> 'reminderOffsets', '[]'::jsonb))
+      from jsonb_array_elements_text(
+        case when jsonb_typeof(v_birthday.data -> 'reminderOffsets') = 'array'
+          then v_birthday.data -> 'reminderOffsets'
+          else '[]'::jsonb
+        end
+      )
       where value in ('0', '1', '3')
     loop
       v_send_at := ((v_occurrence_date - v_offset) + v_reminder_time) at time zone v_timezone;
@@ -185,6 +200,21 @@ drop trigger if exists settings_rebuild_birthday_reminders on public.user_settin
 create trigger settings_rebuild_birthday_reminders
 after insert or update on public.user_settings
 for each row execute procedure public.rebuild_birthday_reminders_on_settings_change();
+
+-- A trigger only sees future writes. Backfill every active birthday once during
+-- the migration so existing users receive the same rolling schedule immediately.
+-- The scheduler is idempotent: deterministic IDs update pending/cancelled/failed
+-- rows and never reopen a sent schedule.
+do $$
+declare v_birthday_id text;
+begin
+  for v_birthday_id in
+    select id from public.birthdays where deleted_at is null
+  loop
+    perform public.rebuild_birthday_reminders(v_birthday_id);
+  end loop;
+end;
+$$;
 
 -- Authenticated users keep read-only access through the existing owner RLS policy.
 -- The Edge Function uses the service role to replenish an annual rolling horizon.
