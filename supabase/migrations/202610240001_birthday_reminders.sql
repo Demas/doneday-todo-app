@@ -7,9 +7,9 @@ set data = jsonb_set(
   data,
   '{reminderOffsets}',
   coalesce((
-    select jsonb_agg(offset order by case offset when 3 then 1 when 1 then 2 else 3 end)
+    select jsonb_agg(reminder_day_offset order by case reminder_day_offset when 3 then 1 when 1 then 2 else 3 end)
     from (
-      select distinct value::integer as offset
+      select distinct value::integer as reminder_day_offset
       from jsonb_array_elements_text(
         case when jsonb_typeof(data -> 'reminderOffsets') = 'array'
           then data -> 'reminderOffsets'

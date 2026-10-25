@@ -31,6 +31,8 @@ describe('birthday reminders', () => {
   it('backfills active birthdays safely and keeps scheduling server-side, owner-scoped, and separate from task reminders', () => {
     const migration = readFileSync(resolve(process.cwd(), 'supabase/migrations/202610240001_birthday_reminders.sql'), 'utf8')
     const dispatcher = readFileSync(resolve(process.cwd(), 'supabase/functions/reminder-dispatch/index.ts'), 'utf8')
+    expect(migration).toContain('jsonb_agg(reminder_day_offset order by case reminder_day_offset')
+    expect(migration).not.toContain('jsonb_agg(offset order by')
     expect(migration).toContain("where value in ('0', '1', '3')")
     expect(migration).toContain("case when jsonb_typeof(v_birthday.data -> 'reminderOffsets') = 'array'")
     expect(migration).toContain('Backfill every active birthday once during')
