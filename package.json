@@ -10,11 +10,14 @@
     "preview": "vite preview --configLoader native --host 0.0.0.0",
     "android:sync": "npm run build && cap sync android",
     "android:open": "cap open android",
-    "android:debug": "npm run android:sync && cd android && gradlew.bat :app:assembleDebug"
+    "android:debug": "npm run android:sync && cd android && gradlew.bat :app:assembleDebug",
+    "ios:sync": "npm run build && cap sync ios",
+    "ios:open": "cap open ios"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.3",
     "@capacitor/core": "^8.5.3",
+    "@capacitor/ios": "^8.5.3",
     "@supabase/supabase-js": "^2.98.0",
     "lucide-react": "^0.468.0",
     "react": "latest",
