@@ -116,6 +116,10 @@ On a physical Android device, choose **Smart Alarm** while editing a timed task 
 
 The native code has not been built or exercised on this workstation because no JDK is installed. Before store submission, test on physical devices with the app open, closed, and locked; denied permissions; battery-saving modes; reboot; time-zone/DST changes; Stop/Snooze; repeated schedules; editing/deleting/completing tasks; duplicate prevention; offline operation; and multiple devices. Test iOS AlarmKit separately on compatible hardware before describing it as available.
 
+## DoneDay Pro and payments
+
+Phase D/E adds only a reviewed entitlement-data foundation; it does not add checkout, subscriptions, billing SDKs, or paid feature gates. Current guest and account features remain available. See [docs/de-entitlements-foundation.md](docs/de-entitlements-foundation.md) before introducing any provider configuration or applying the entitlement migration.
+
 ## Vercel deployment
 
 Keep the existing Vercel project and domain. Use the **Vite** preset, build command `npm run build`, and output directory `dist`. Configure public Supabase and VAPID values as Vercel environment variables; configure all privileged values only in Supabase Edge Function secrets.
