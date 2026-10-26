@@ -22,8 +22,17 @@ public class DoneDayAlarmReceiver extends BroadcastReceiver {
         try {
             JSObject alarm = DoneDayAlarmScheduler.find(context, id);
             if (alarm == null) return;
-            showNotification(context, id, alarm);
+            boolean shouldRing = DoneDayAlarmCoordinator.enqueue(context, id);
             DoneDayAlarmScheduler.rescheduleAfterFire(context, id);
+            if (shouldRing) showNotification(context, id, alarm);
+        } catch (Exception ignored) { }
+    }
+
+    static void activateNext(Context context, String id) {
+        if (id == null || id.isEmpty()) return;
+        try {
+            JSObject alarm = DoneDayAlarmScheduler.find(context, id);
+            if (alarm != null) showNotification(context, id, alarm);
         } catch (Exception ignored) { }
     }
 
@@ -38,23 +47,35 @@ public class DoneDayAlarmReceiver extends BroadcastReceiver {
             alarmChannel.setVibrationPattern(new long[]{0, 600, 450});
             manager.createNotificationChannel(alarmChannel);
         }
-        Intent display = new Intent(context, DoneDayAlarmActivity.class).putExtra(DoneDayAlarmScheduler.EXTRA_ID, id).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-        PendingIntent fullScreen = PendingIntent.getActivity(context, id.hashCode(), display, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-        Intent stop = new Intent(context, DoneDayAlarmActionReceiver.class).setAction("STOP").putExtra(DoneDayAlarmScheduler.EXTRA_ID, id);
-        Intent snooze = new Intent(context, DoneDayAlarmActionReceiver.class).setAction("SNOOZE").putExtra(DoneDayAlarmScheduler.EXTRA_ID, id).putExtra("minutes", alarm.getInteger("snoozeMinutes", 10));
+        Intent display = new Intent(context, DoneDayAlarmActivity.class).setData(DoneDayAlarmScheduler.alarmUri("activity", id)).putExtra(DoneDayAlarmScheduler.EXTRA_ID, id).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        PendingIntent fullScreen = PendingIntent.getActivity(context, 0, display, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        Intent stop = new Intent(context, DoneDayAlarmActionReceiver.class).setAction("STOP").setData(DoneDayAlarmScheduler.alarmUri("stop", id)).putExtra(DoneDayAlarmScheduler.EXTRA_ID, id);
+        Intent snooze = new Intent(context, DoneDayAlarmActionReceiver.class).setAction("SNOOZE").setData(DoneDayAlarmScheduler.alarmUri("snooze", id)).putExtra(DoneDayAlarmScheduler.EXTRA_ID, id).putExtra("minutes", alarm.getInteger("snoozeMinutes", 10));
         NotificationCompat.Builder notice = new NotificationCompat.Builder(context, channel)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
             .setContentTitle(alarm.getString("title", "DoneDay Smart Alarm"))
-            .setContentText(alarm.getString("body", "Time for your task."))
+            .setContentText(alarm.getString("body", "Time for your task.") + queueSuffix(context))
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setOngoing(true)
             .setContentIntent(fullScreen)
             .setFullScreenIntent(fullScreen, true)
             .setSound(DoneDayAlarmScheduler.ringtoneUri(alarm))
-            .addAction(0, "Snooze", PendingIntent.getBroadcast(context, id.hashCode() + 1, snooze, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE))
-            .addAction(0, "Stop", PendingIntent.getBroadcast(context, id.hashCode() + 2, stop, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE));
-        NotificationManagerCompat.from(context).notify(id.hashCode(), notice.build());
+            .addAction(0, "Snooze", PendingIntent.getBroadcast(context, 0, snooze, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE))
+            .addAction(0, "Stop", PendingIntent.getBroadcast(context, 0, stop, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE));
+        NotificationManagerCompat.from(context).notify(notificationTag(id), 0, notice.build());
+    }
+
+    static void cancelNotification(Context context, String id) {
+        NotificationManagerCompat notifications = NotificationManagerCompat.from(context);
+        notifications.cancel(notificationTag(id), 0);
+        notifications.cancel(id.hashCode()); // Clear a notification created before A2.
+    }
+
+    private static String notificationTag(String id) { return "doneday-alarm:" + id; }
+    private static String queueSuffix(Context context) {
+        int queued = DoneDayAlarmCoordinator.queuedCount(context);
+        return queued == 0 ? "" : " · " + queued + (queued == 1 ? " alarm waiting" : " alarms waiting");
     }
 
     private static String channelId(JSObject alarm) {

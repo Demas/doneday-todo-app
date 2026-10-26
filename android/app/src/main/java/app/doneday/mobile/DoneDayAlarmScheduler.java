@@ -29,6 +29,7 @@ public final class DoneDayAlarmScheduler {
     static final String EXTRA_ID = "alarm_id";
     static final String ACTION_RING = "app.doneday.mobile.RING";
     static final String ACTION_DISMISS_RINGING = "app.doneday.mobile.DISMISS_RINGING";
+    static final String ACTION_QUEUE_CHANGED = "app.doneday.mobile.QUEUE_CHANGED";
     private static final long TEST_ALARM_LIFETIME_MS = 60 * 60 * 1000L;
     private static final Set<String> KNOWN_TIME_ZONES = new HashSet<>(Arrays.asList(TimeZone.getAvailableIDs()));
 
@@ -195,6 +196,9 @@ public final class DoneDayAlarmScheduler {
     static void cancel(Context context, String id) {
         AlarmManager manager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
         manager.cancel(pendingIntent(context, id));
+        // Migration cleanup for pre-A2 schedules, whose PendingIntent identity
+        // was only a hash code and could collide with a different alarm.
+        manager.cancel(legacyPendingIntent(context, id));
     }
 
     private static void schedule(Context context, JSObject alarm) throws Exception {
@@ -310,7 +314,19 @@ public final class DoneDayAlarmScheduler {
     }
 
     private static PendingIntent pendingIntent(Context context, String id) {
+        Intent intent = new Intent(context, DoneDayAlarmReceiver.class)
+            .setAction(ACTION_RING)
+            .setData(alarmUri("ring", id))
+            .putExtra(EXTRA_ID, id);
+        return PendingIntent.getBroadcast(context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+    }
+
+    private static PendingIntent legacyPendingIntent(Context context, String id) {
         Intent intent = new Intent(context, DoneDayAlarmReceiver.class).setAction(ACTION_RING).putExtra(EXTRA_ID, id);
         return PendingIntent.getBroadcast(context, id.hashCode(), intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+    }
+
+    static Uri alarmUri(String purpose, String id) {
+        return new Uri.Builder().scheme("doneday").authority("alarm").appendPath(purpose).appendPath(id).build();
     }
 }

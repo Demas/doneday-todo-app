@@ -10,7 +10,7 @@ public class DoneDayAlarmActionReceiver extends BroadcastReceiver {
     @Override public void onReceive(Context context, Intent intent) {
         String id = intent.getStringExtra(DoneDayAlarmScheduler.EXTRA_ID);
         if (id == null) return;
-        NotificationManagerCompat.from(context).cancel(id.hashCode());
+        DoneDayAlarmReceiver.cancelNotification(context, id);
         boolean snoozed = "SNOOZE".equals(intent.getAction());
         if (snoozed) {
             DoneDayAlarmScheduler.snooze(context, id, intent.getIntExtra("minutes", 10));
@@ -22,5 +22,6 @@ public class DoneDayAlarmActionReceiver extends BroadcastReceiver {
             .putExtra(DoneDayAlarmScheduler.EXTRA_ID, id)
             .putExtra("snoozed", snoozed);
         context.sendBroadcast(dismiss);
+        DoneDayAlarmReceiver.activateNext(context, DoneDayAlarmCoordinator.finish(context, id));
     }
 }

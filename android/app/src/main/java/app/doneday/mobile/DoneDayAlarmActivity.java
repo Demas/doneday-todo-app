@@ -24,9 +24,12 @@ public class DoneDayAlarmActivity extends Activity {
     private Ringtone ringtone;
     private Vibrator vibrator;
     private boolean actionReceiverRegistered;
+    private TextView queueStatus;
     private final BroadcastReceiver actionReceiver = new BroadcastReceiver() {
         @Override public void onReceive(Context context, Intent intent) {
-            if (id != null && id.equals(intent.getStringExtra(DoneDayAlarmScheduler.EXTRA_ID))) {
+            if (DoneDayAlarmScheduler.ACTION_QUEUE_CHANGED.equals(intent.getAction())) {
+                updateQueueStatus();
+            } else if (id != null && id.equals(intent.getStringExtra(DoneDayAlarmScheduler.EXTRA_ID))) {
                 stopAlarm();
                 finish();
             }
@@ -42,8 +45,9 @@ public class DoneDayAlarmActivity extends Activity {
         LinearLayout content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL); content.setPadding(48, 96, 48, 48);
         TextView title = new TextView(this); title.setText(alarm == null ? "DoneDay Smart Alarm" : alarm.getString("title", "DoneDay Smart Alarm")); title.setTextSize(28); content.addView(title);
         TextView body = new TextView(this); body.setText(alarm == null ? "Time for your task." : alarm.getString("body", "Time for your task.")); body.setTextSize(18); content.addView(body);
-        Button snooze = new Button(this); snooze.setText("Snooze"); snooze.setOnClickListener(view -> { stopAlarm(); if (alarm != null) DoneDayAlarmScheduler.snooze(this, id, alarm.getInteger("snoozeMinutes", 10)); finish(); }); content.addView(snooze);
-        Button stop = new Button(this); stop.setText("Stop"); stop.setOnClickListener(view -> { stopAlarm(); DoneDayAlarmScheduler.dismiss(this, id); finish(); }); content.addView(stop);
+        queueStatus = new TextView(this); queueStatus.setTextSize(16); content.addView(queueStatus); updateQueueStatus();
+        Button snooze = new Button(this); snooze.setText("Snooze"); snooze.setOnClickListener(view -> { stopAlarm(); if (alarm != null) DoneDayAlarmScheduler.snooze(this, id, alarm.getInteger("snoozeMinutes", 10)); String next = DoneDayAlarmCoordinator.finish(this, id); finish(); DoneDayAlarmReceiver.activateNext(this, next); }); content.addView(snooze);
+        Button stop = new Button(this); stop.setText("Stop"); stop.setOnClickListener(view -> { stopAlarm(); DoneDayAlarmScheduler.dismiss(this, id); String next = DoneDayAlarmCoordinator.finish(this, id); finish(); DoneDayAlarmReceiver.activateNext(this, next); }); content.addView(stop);
         setContentView(content);
         start(alarm);
     }
@@ -52,10 +56,16 @@ public class DoneDayAlarmActivity extends Activity {
         if (ringtone != null) { ringtone.setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build()); if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) ringtone.setLooping(true); ringtone.play(); }
         if (alarm == null || alarm.getBoolean("vibrate", true)) { vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE); if (vibrator != null) { if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) vibrator.vibrate(VibrationEffect.createWaveform(new long[]{0, 600, 450}, 0)); else vibrator.vibrate(new long[]{0, 600, 450}, 0); } }
     }
-    private void stopAlarm() { if (ringtone != null && ringtone.isPlaying()) ringtone.stop(); if (vibrator != null) vibrator.cancel(); if (id != null) NotificationManagerCompat.from(this).cancel(id.hashCode()); }
+    private void stopAlarm() { if (ringtone != null && ringtone.isPlaying()) ringtone.stop(); if (vibrator != null) vibrator.cancel(); if (id != null) DoneDayAlarmReceiver.cancelNotification(this, id); }
+    private void updateQueueStatus() {
+        if (queueStatus == null) return;
+        int queued = DoneDayAlarmCoordinator.queuedCount(this);
+        queueStatus.setText(queued == 0 ? "" : queued + (queued == 1 ? " alarm waiting" : " alarms waiting"));
+    }
     @Override protected void onStart() {
         super.onStart();
         IntentFilter filter = new IntentFilter(DoneDayAlarmScheduler.ACTION_DISMISS_RINGING);
+        filter.addAction(DoneDayAlarmScheduler.ACTION_QUEUE_CHANGED);
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) registerReceiver(actionReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
         else registerReceiver(actionReceiver, filter);
         actionReceiverRegistered = true;
