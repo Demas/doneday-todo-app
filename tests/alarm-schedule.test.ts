@@ -33,6 +33,19 @@ describe('canonical Smart Alarm scheduling', () => {
     expect(fold?.at.toISOString()).toBe('2026-11-01T05:30:00.000Z')
   })
 
+  it('resolves non-DST zones and both DST transitions with the same civil-time contract', () => {
+    expect(resolveAlarmOccurrence(schedule({ localDate: '2026-06-15', localTime: '09:00', timezone: 'Africa/Lagos' }))?.at.toISOString()).toBe('2026-06-15T08:00:00.000Z')
+    expect(resolveAlarmOccurrence(schedule({ localDate: '2026-06-15', localTime: '09:00', timezone: 'Asia/Kathmandu' }))?.at.toISOString()).toBe('2026-06-15T03:15:00.000Z')
+
+    const londonFold = resolveAlarmOccurrence(schedule({ localDate: '2026-10-25', localTime: '01:30', timezone: 'Europe/London' }))
+    expect(londonFold).toMatchObject({ resolution: 'fold-earlier' })
+    expect(londonFold?.at.toISOString()).toBe('2026-10-25T00:30:00.000Z')
+
+    const newYorkGap = resolveAlarmOccurrence(schedule({ localDate: '2026-03-08', localTime: '02:30', timezone: 'America/New_York' }))
+    expect(newYorkGap).toMatchObject({ resolution: 'gap-shifted-forward' })
+    expect(newYorkGap?.at.toISOString()).toBe('2026-03-08T07:00:00.000Z')
+  })
+
   it('keeps recurrence, civil date/time, identity, and revision in the shared definition', () => {
     const recurring = schedule({ reminderId: 'task:weekly', localDate: '2026-10-12', localTime: '08:15', recurrence: 'selected-days', recurrenceDays: [1, 3, 1], scheduleRevision: 4 })
     expect(recurring).toEqual(expect.objectContaining({ version: 1, reminderId: 'task:weekly', localDate: '2026-10-12', localTime: '08:15', recurrence: 'selected-days', recurrenceDays: [1, 3], scheduleRevision: 4 }))
