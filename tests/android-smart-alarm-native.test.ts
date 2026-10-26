@@ -33,4 +33,14 @@ describe('Android Smart Alarm native workflow', () => {
     expect(plugin).toContain('result.put("fullScreenIntents", fullScreen)')
     expect(plugin).toContain('Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT')
   })
+
+  it('validates named timezones and applies the shared DST and travel contract without a GMT fallback', () => {
+    const scheduler = nativeSource('DoneDayAlarmScheduler.java')
+    expect(scheduler).toContain('KNOWN_TIME_ZONES')
+    expect(scheduler).toContain('"follow-device".equals(alarm.getString("timezoneMode", "fixed"))')
+    expect(scheduler).toContain('DoneDay alarm timezone is not a valid IANA timezone.')
+    expect(scheduler).toContain('resolveWallClock')
+    expect(scheduler).toContain('a spring-forward gap moves to its first valid local minute; a fall-back fold uses the earlier instant')
+    expect(scheduler).toContain('alarm.getString("localDate", alarm.getString("date", ""))')
+  })
 })

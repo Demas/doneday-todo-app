@@ -1,10 +1,12 @@
+import { canonicalTimeZone, deviceTimeZone, nextScheduleRevision, type AlarmTimezoneMode } from './alarmSchedule'
+
 export type Priority = 'low' | 'medium' | 'high' | 'urgent'
 export type Recurrence = 'none' | 'daily' | 'weekdays' | 'weekly' | 'monthly' | 'selected-days'
 export type ReminderOffset = 0 | 5 | 10 | 30 | 60 | 1440
 export type AlarmMode = 'notification' | 'smart'
 export type AlarmRingtone = 'alarm' | 'notification' | 'ringtone'
-export type AlarmConfig = { mode: AlarmMode; enabled: boolean; ringtone: AlarmRingtone; vibrate: boolean; snoozeMinutes: 5 | 10 | 15 | 30; timezone: string }
-export const defaultAlarmConfig = (): AlarmConfig => ({ mode: 'notification', enabled: true, ringtone: 'alarm', vibrate: true, snoozeMinutes: 10, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' })
+export type AlarmConfig = { mode: AlarmMode; enabled: boolean; ringtone: AlarmRingtone; vibrate: boolean; snoozeMinutes: 5 | 10 | 15 | 30; timezone: string; timezoneMode: AlarmTimezoneMode; scheduleVersion: 1; scheduleRevision: number }
+export const defaultAlarmConfig = (): AlarmConfig => ({ mode: 'notification', enabled: true, ringtone: 'alarm', vibrate: true, snoozeMinutes: 10, timezone: deviceTimeZone(), timezoneMode: 'fixed', scheduleVersion: 1, scheduleRevision: 1 })
 export type Subtask = { id: string; title: string; completed: boolean }
 export type Task = {
   id: string; title: string; description: string; completed: boolean; createdAt: string; updatedAt: string
@@ -42,8 +44,24 @@ const parseAlarm = (value: unknown): AlarmConfig | undefined => {
   if (!value || typeof value !== 'object') return undefined
   const alarm = value as Partial<AlarmConfig>
   if (alarm.mode !== 'notification' && alarm.mode !== 'smart') return undefined
-  return { mode: alarm.mode, enabled: alarm.enabled !== false, ringtone: alarm.ringtone === 'notification' || alarm.ringtone === 'ringtone' ? alarm.ringtone : 'alarm', vibrate: alarm.vibrate !== false, snoozeMinutes: [5, 10, 15, 30].includes(alarm.snoozeMinutes as number) ? alarm.snoozeMinutes as AlarmConfig['snoozeMinutes'] : 10, timezone: typeof alarm.timezone === 'string' && alarm.timezone.trim() ? alarm.timezone.trim().slice(0, 80) : Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' }
+  // Legacy alarms did not carry a schedule version, mode, or revision. Keep a
+  // malformed saved zone visible for repair instead of letting Android turn it
+  // into GMT; scheduling code refuses it until the user selects a valid zone.
+  const savedTimezone = typeof alarm.timezone === 'string' && alarm.timezone.trim() ? alarm.timezone.trim().slice(0, 80) : deviceTimeZone()
+  return {
+    mode: alarm.mode,
+    enabled: alarm.enabled !== false,
+    ringtone: alarm.ringtone === 'notification' || alarm.ringtone === 'ringtone' ? alarm.ringtone : 'alarm',
+    vibrate: alarm.vibrate !== false,
+    snoozeMinutes: [5, 10, 15, 30].includes(alarm.snoozeMinutes as number) ? alarm.snoozeMinutes as AlarmConfig['snoozeMinutes'] : 10,
+    timezone: canonicalTimeZone(savedTimezone) || savedTimezone,
+    timezoneMode: alarm.timezoneMode === 'follow-device' ? 'follow-device' : 'fixed',
+    scheduleVersion: 1,
+    scheduleRevision: Math.max(1, Math.floor(alarm.scheduleRevision ?? 1) || 1),
+  }
 }
+
+export const revisedAlarmConfig = (alarm: AlarmConfig): AlarmConfig => ({ ...alarm, scheduleVersion: 1, scheduleRevision: nextScheduleRevision(alarm.scheduleRevision) })
 
 export const isOverdue = (task: Task, today = localDate(), now = new Date()) => {
   if (task.completed || !task.dueDate) return false

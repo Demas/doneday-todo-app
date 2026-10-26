@@ -15,6 +15,9 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.Calendar;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.TimeZone;
 
 public final class DoneDayAlarmScheduler {
@@ -25,6 +28,7 @@ public final class DoneDayAlarmScheduler {
     static final String ACTION_RING = "app.doneday.mobile.RING";
     static final String ACTION_DISMISS_RINGING = "app.doneday.mobile.DISMISS_RINGING";
     private static final long TEST_ALARM_LIFETIME_MS = 60 * 60 * 1000L;
+    private static final Set<String> KNOWN_TIME_ZONES = new HashSet<>(Arrays.asList(TimeZone.getAvailableIDs()));
 
     private DoneDayAlarmScheduler() {}
 
@@ -32,7 +36,12 @@ public final class DoneDayAlarmScheduler {
         cancelStored(context);
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(STORED, alarms.toString()).apply();
         for (int index = 0; index < alarms.length(); index++) {
-            schedule(context, JSObject.fromJSONObject(alarms.getJSONObject(index)));
+            try {
+                schedule(context, JSObject.fromJSONObject(alarms.getJSONObject(index)));
+            } catch (IllegalArgumentException ignored) {
+                // Preserve a legacy invalid definition for the web UI to repair,
+                // but never let TimeZone.getTimeZone silently schedule it as GMT.
+            }
         }
     }
 
@@ -43,9 +52,12 @@ public final class DoneDayAlarmScheduler {
         alarm.put("id", test.getString("id", "test"));
         alarm.put("title", test.getString("title", "DoneDay Smart Alarm"));
         alarm.put("body", test.getString("body", "This is a Smart Alarm test."));
-        alarm.put("date", String.format("%04d-%02d-%02d", at.get(Calendar.YEAR), at.get(Calendar.MONTH) + 1, at.get(Calendar.DAY_OF_MONTH)));
-        alarm.put("time", String.format("%02d:%02d", at.get(Calendar.HOUR_OF_DAY), at.get(Calendar.MINUTE)));
+        alarm.put("localDate", String.format("%04d-%02d-%02d", at.get(Calendar.YEAR), at.get(Calendar.MONTH) + 1, at.get(Calendar.DAY_OF_MONTH)));
+        alarm.put("localTime", String.format("%02d:%02d", at.get(Calendar.HOUR_OF_DAY), at.get(Calendar.MINUTE)));
         alarm.put("timezone", TimeZone.getDefault().getID());
+        alarm.put("timezoneMode", "fixed");
+        alarm.put("version", 1);
+        alarm.put("scheduleRevision", 1);
         alarm.put("recurrence", "none");
         alarm.put("ringtone", test.getString("ringtone", "alarm"));
         alarm.put("vibrate", test.getBoolean("vibrate", true));
@@ -150,20 +162,80 @@ public final class DoneDayAlarmScheduler {
     }
 
     private static void schedule(Context context, JSObject alarm) throws Exception {
-        String[] date = alarm.getString("date").split("-");
-        String[] time = alarm.getString("time").split(":");
-        TimeZone zone = TimeZone.getTimeZone(alarm.getString("timezone", TimeZone.getDefault().getID()));
-        Calendar next = Calendar.getInstance(zone);
-        next.set(Calendar.YEAR, Integer.parseInt(date[0]));
-        next.set(Calendar.MONTH, Integer.parseInt(date[1]) - 1);
-        next.set(Calendar.DAY_OF_MONTH, Integer.parseInt(date[2]));
-        next.set(Calendar.HOUR_OF_DAY, Integer.parseInt(time[0]));
-        next.set(Calendar.MINUTE, Integer.parseInt(time[1]));
-        next.set(Calendar.SECOND, 0);
-        next.set(Calendar.MILLISECOND, 0);
+        String[] date = alarm.getString("localDate", alarm.getString("date", "")).split("-");
+        String[] time = alarm.getString("localTime", alarm.getString("time", "")).split(":");
+        if (date.length != 3 || time.length != 2) throw new IllegalArgumentException("DoneDay alarm has an invalid local date or time.");
+        TimeZone zone = timezoneFor(alarm);
+        Calendar next = wallClock(date, time);
         String recurrence = alarm.getString("recurrence", "none");
-        while (next.getTimeInMillis() <= System.currentTimeMillis() && !"none".equals(recurrence)) advance(next, recurrence, alarm.getJSONArray("recurrenceDays"));
-        if (next.getTimeInMillis() > System.currentTimeMillis()) scheduleAt(context, alarm, next.getTimeInMillis());
+        JSONArray selectedDays = alarm.optJSONArray("recurrenceDays");
+        if (selectedDays == null) selectedDays = new JSONArray();
+        long when = resolveWallClock(next, zone);
+        while (when <= System.currentTimeMillis() && !"none".equals(recurrence)) {
+            advance(next, recurrence, selectedDays);
+            when = resolveWallClock(next, zone);
+        }
+        if (when > System.currentTimeMillis()) scheduleAt(context, alarm, when);
+    }
+
+    private static TimeZone timezoneFor(JSObject alarm) {
+        if ("follow-device".equals(alarm.getString("timezoneMode", "fixed"))) return TimeZone.getDefault();
+        String id = alarm.getString("timezone", "");
+        if (!KNOWN_TIME_ZONES.contains(id)) throw new IllegalArgumentException("DoneDay alarm timezone is not a valid IANA timezone.");
+        return TimeZone.getTimeZone(id);
+    }
+
+    private static Calendar wallClock(String[] date, String[] time) {
+        Calendar wall = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+        wall.clear();
+        wall.setLenient(false);
+        wall.set(Integer.parseInt(date[0]), Integer.parseInt(date[1]) - 1, Integer.parseInt(date[2]), Integer.parseInt(time[0]), Integer.parseInt(time[1]), 0);
+        wall.set(Calendar.MILLISECOND, 0);
+        // Force date/time validation before passing values into a timezone.
+        wall.getTimeInMillis();
+        return wall;
+    }
+
+    /** DST policy: a spring-forward gap moves to its first valid local minute; a fall-back fold uses the earlier instant. */
+    private static long resolveWallClock(Calendar wall, TimeZone zone) {
+        Long direct = strictMillis(wall, zone);
+        if (direct != null) return earliestMatchingOccurrence(wall, zone, direct);
+        Calendar afterGap = (Calendar) wall.clone();
+        for (int minute = 1; minute <= 180; minute++) {
+            afterGap.add(Calendar.MINUTE, 1);
+            Long shifted = strictMillis(afterGap, zone);
+            if (shifted != null) return earliestMatchingOccurrence(afterGap, zone, shifted);
+        }
+        throw new IllegalArgumentException("DoneDay could not resolve this alarm time in the selected timezone.");
+    }
+
+    private static Long strictMillis(Calendar wall, TimeZone zone) {
+        Calendar local = Calendar.getInstance(zone);
+        local.clear();
+        local.setLenient(false);
+        local.set(wall.get(Calendar.YEAR), wall.get(Calendar.MONTH), wall.get(Calendar.DAY_OF_MONTH), wall.get(Calendar.HOUR_OF_DAY), wall.get(Calendar.MINUTE), 0);
+        local.set(Calendar.MILLISECOND, 0);
+        try { return local.getTimeInMillis(); }
+        catch (IllegalArgumentException ignored) { return null; }
+    }
+
+    private static long earliestMatchingOccurrence(Calendar wall, TimeZone zone, long candidate) {
+        long earliest = candidate;
+        for (int minute = 1; minute <= 180; minute++) {
+            long earlier = candidate - minute * 60_000L;
+            Calendar actual = Calendar.getInstance(zone);
+            actual.setTimeInMillis(earlier);
+            if (sameWallClock(actual, wall)) earliest = earlier;
+        }
+        return earliest;
+    }
+
+    private static boolean sameWallClock(Calendar left, Calendar right) {
+        return left.get(Calendar.YEAR) == right.get(Calendar.YEAR)
+            && left.get(Calendar.MONTH) == right.get(Calendar.MONTH)
+            && left.get(Calendar.DAY_OF_MONTH) == right.get(Calendar.DAY_OF_MONTH)
+            && left.get(Calendar.HOUR_OF_DAY) == right.get(Calendar.HOUR_OF_DAY)
+            && left.get(Calendar.MINUTE) == right.get(Calendar.MINUTE);
     }
 
     private static void advance(Calendar next, String recurrence, JSONArray selectedDays) throws Exception {
