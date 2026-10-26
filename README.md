@@ -20,6 +20,10 @@ npm run build
 
 The production files are written to `dist/`.
 
+## Release preparation
+
+Phase C launch materials are in [`docs/release-launch-checklist.md`](docs/release-launch-checklist.md), [`docs/store-listing-draft.md`](docs/store-listing-draft.md), and [`docs/privacy-policy-draft.md`](docs/privacy-policy-draft.md). They prepare a release but do not authorize publishing, store submission, or deployment. Complete the physical-device, legal, signing, and provider-validation blockers before release.
+
 ## Guest mode
 
 No account or environment variables are required to use DoneDay. Guest tasks, birthdays, routines, settings, and in-app reminders remain in this browser’s local storage. Export a JSON backup from Settings before clearing browser data or switching browsers.
