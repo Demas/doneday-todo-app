@@ -6,7 +6,9 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.media.AudioAttributes;
+import android.media.MediaPlayer;
 import android.media.Ringtone;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
@@ -22,6 +24,7 @@ import com.getcapacitor.JSObject;
 public class DoneDayAlarmActivity extends Activity {
     private String id;
     private Ringtone ringtone;
+    private MediaPlayer legacyLoopingPlayer;
     private Vibrator vibrator;
     private boolean actionReceiverRegistered;
     private TextView queueStatus;
@@ -52,11 +55,31 @@ public class DoneDayAlarmActivity extends Activity {
         start(alarm);
     }
     private void start(JSObject alarm) {
-        ringtone = android.media.RingtoneManager.getRingtone(this, alarm == null ? android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_ALARM) : DoneDayAlarmScheduler.ringtoneUri(alarm));
-        if (ringtone != null) { ringtone.setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build()); if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) ringtone.setLooping(true); ringtone.play(); }
+        Uri sound = alarm == null ? android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_ALARM) : DoneDayAlarmScheduler.ringtoneUri(alarm);
+        AudioAttributes attributes = new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build();
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            ringtone = android.media.RingtoneManager.getRingtone(this, sound);
+            if (ringtone != null) { ringtone.setAudioAttributes(attributes); ringtone.setLooping(true); ringtone.play(); }
+        } else {
+            // Ringtone looping is only exposed from Android 9. Use MediaPlayer on API 24-27
+            // so a Smart Alarm does not become a one-shot notification sound on those devices.
+            try {
+                legacyLoopingPlayer = new MediaPlayer();
+                legacyLoopingPlayer.setAudioAttributes(attributes);
+                legacyLoopingPlayer.setDataSource(this, sound);
+                legacyLoopingPlayer.setLooping(true);
+                legacyLoopingPlayer.prepare();
+                legacyLoopingPlayer.start();
+            } catch (Exception ignored) {
+                if (legacyLoopingPlayer != null) legacyLoopingPlayer.release();
+                legacyLoopingPlayer = null;
+                ringtone = android.media.RingtoneManager.getRingtone(this, sound);
+                if (ringtone != null) { ringtone.setAudioAttributes(attributes); ringtone.play(); }
+            }
+        }
         if (alarm == null || alarm.getBoolean("vibrate", true)) { vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE); if (vibrator != null) { if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) vibrator.vibrate(VibrationEffect.createWaveform(new long[]{0, 600, 450}, 0)); else vibrator.vibrate(new long[]{0, 600, 450}, 0); } }
     }
-    private void stopAlarm() { if (ringtone != null && ringtone.isPlaying()) ringtone.stop(); if (vibrator != null) vibrator.cancel(); if (id != null) DoneDayAlarmReceiver.cancelNotification(this, id); }
+    private void stopAlarm() { if (ringtone != null && ringtone.isPlaying()) ringtone.stop(); if (legacyLoopingPlayer != null) { if (legacyLoopingPlayer.isPlaying()) legacyLoopingPlayer.stop(); legacyLoopingPlayer.release(); legacyLoopingPlayer = null; } if (vibrator != null) vibrator.cancel(); if (id != null) DoneDayAlarmReceiver.cancelNotification(this, id); }
     private void updateQueueStatus() {
         if (queueStatus == null) return;
         int queued = DoneDayAlarmCoordinator.queuedCount(this);

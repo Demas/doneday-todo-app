@@ -34,6 +34,14 @@ describe('Android Smart Alarm native workflow', () => {
     expect(plugin).toContain('Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT')
   })
 
+  it('keeps a looping alarm path for Android API 24 through 27 and releases it on Stop or Snooze', () => {
+    const activity = nativeSource('DoneDayAlarmActivity.java')
+    expect(activity).toContain('private MediaPlayer legacyLoopingPlayer;')
+    expect(activity).toContain('if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P)')
+    expect(activity).toContain('legacyLoopingPlayer.setLooping(true);')
+    expect(activity).toContain('legacyLoopingPlayer.release();')
+  })
+
   it('validates named timezones and applies the shared DST and travel contract without a GMT fallback', () => {
     const scheduler = nativeSource('DoneDayAlarmScheduler.java')
     expect(scheduler).toContain('KNOWN_TIME_ZONES')
