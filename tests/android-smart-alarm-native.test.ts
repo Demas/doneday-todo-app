@@ -43,4 +43,15 @@ describe('Android Smart Alarm native workflow', () => {
     expect(scheduler).toContain('a spring-forward gap moves to its first valid local minute; a fall-back fold uses the earlier instant')
     expect(scheduler).toContain('alarm.getString("localDate", alarm.getString("date", ""))')
   })
+
+  it('replaces schedules before cancelling removed alarms so an invalid replacement cannot erase a valid alarm', () => {
+    const scheduler = nativeSource('DoneDayAlarmScheduler.java')
+    const sync = scheduler.slice(scheduler.indexOf('static void sync'), scheduler.indexOf('static void scheduleTest'))
+    expect(sync).toContain('JSONArray previous = storedDefinitions(context);')
+    expect(sync).toContain('schedule(context, JSObject.fromJSONObject(candidate));')
+    expect(sync).toContain('putString(STORED, retained.toString()).commit()')
+    expect(sync).toContain('if (!retainedIds.contains(id)) cancel(context, id);')
+    expect(sync).not.toContain('cancelStored(context);')
+    expect(sync.indexOf('schedule(context, JSObject.fromJSONObject(candidate));')).toBeLessThan(sync.indexOf('if (!retainedIds.contains(id)) cancel(context, id);'))
+  })
 })

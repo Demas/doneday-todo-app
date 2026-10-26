@@ -17,6 +17,8 @@ import org.json.JSONObject;
 import java.util.Calendar;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.TimeZone;
 
@@ -33,15 +35,40 @@ public final class DoneDayAlarmScheduler {
     private DoneDayAlarmScheduler() {}
 
     static void sync(Context context, JSArray alarms) throws Exception {
-        cancelStored(context);
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(STORED, alarms.toString()).apply();
+        JSONArray previous = storedDefinitions(context);
+        Map<String, JSONObject> previousById = definitionsById(previous);
+        JSONArray retained = new JSONArray();
+        Set<String> retainedIds = new HashSet<>();
+
         for (int index = 0; index < alarms.length(); index++) {
+            JSONObject candidate = alarms.getJSONObject(index);
+            String id = candidate.optString("id");
+            if (id.isEmpty() || retainedIds.contains(id)) continue;
             try {
-                schedule(context, JSObject.fromJSONObject(alarms.getJSONObject(index)));
+                // AlarmManager replaces the PendingIntent for an unchanged ID. Scheduling first
+                // keeps the existing alarm alive if a later replacement is malformed or fails.
+                schedule(context, JSObject.fromJSONObject(candidate));
+                retained.put(candidate);
+                retainedIds.add(id);
             } catch (IllegalArgumentException ignored) {
-                // Preserve a legacy invalid definition for the web UI to repair,
-                // but never let TimeZone.getTimeZone silently schedule it as GMT.
+                // Preserve a prior valid alarm if a new legacy definition cannot be resolved.
+                // Never use TimeZone.getTimeZone's silent GMT fallback for the bad definition.
+                JSONObject existing = previousById.get(id);
+                if (existing != null) {
+                    retained.put(existing);
+                    retainedIds.add(id);
+                }
             }
+        }
+
+        // Commit before cancelling removed alarms. If storage is unavailable, old definitions and
+        // their scheduled PendingIntents are left intact instead of silently losing reminders.
+        if (!context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(STORED, retained.toString()).commit()) {
+            throw new IllegalStateException("DoneDay could not save Smart Alarm schedules.");
+        }
+        for (int index = 0; index < previous.length(); index++) {
+            String id = previous.getJSONObject(index).optString("id");
+            if (!retainedIds.contains(id)) cancel(context, id);
         }
     }
 
@@ -112,10 +139,19 @@ public final class DoneDayAlarmScheduler {
         return null;
     }
 
-    private static void cancelStored(Context context) throws Exception {
+    private static JSONArray storedDefinitions(Context context) throws Exception {
         String saved = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(STORED, "[]");
-        JSONArray alarms = new JSONArray(saved);
-        for (int index = 0; index < alarms.length(); index++) cancel(context, alarms.getJSONObject(index).optString("id"));
+        return new JSONArray(saved);
+    }
+
+    private static Map<String, JSONObject> definitionsById(JSONArray alarms) throws Exception {
+        Map<String, JSONObject> byId = new HashMap<>();
+        for (int index = 0; index < alarms.length(); index++) {
+            JSONObject alarm = alarms.getJSONObject(index);
+            String id = alarm.optString("id");
+            if (!id.isEmpty()) byId.put(id, alarm);
+        }
+        return byId;
     }
 
     private static void storeTemporary(Context context, JSObject alarm) throws Exception {
@@ -175,7 +211,14 @@ public final class DoneDayAlarmScheduler {
             advance(next, recurrence, selectedDays);
             when = resolveWallClock(next, zone);
         }
-        if (when > System.currentTimeMillis()) scheduleAt(context, alarm, when);
+        if (when > System.currentTimeMillis()) {
+            scheduleAt(context, alarm, when);
+        } else {
+            // A one-time alarm already in the past must replace any old PendingIntent with
+            // no alarm at all. This matters when an edit changes a future reminder to a
+            // past date while sync is deliberately preserving schedules until replacement.
+            cancel(context, alarm.getString("id"));
+        }
     }
 
     private static TimeZone timezoneFor(JSObject alarm) {
