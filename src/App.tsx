@@ -10,6 +10,7 @@ import { greetingFor, hasMeaningfulLocalData, shouldShowWelcome } from './person
 import { WelcomeScreen } from './WelcomeScreen'
 import { AlarmControls } from './AlarmControls'
 import { useNativeAlarmSync } from './alarms'
+import { IosAlarmOverlay } from './IosAlarmOverlay'
 
 type View = 'dashboard' | 'all' | 'today' | 'upcoming' | 'overdue' | 'completed' | 'categories' | 'planner' | 'birthdays' | 'reminders' | 'settings'
 const viewLabels: Record<View, string> = { dashboard: 'Dashboard', all: 'My Tasks', today: 'Today', upcoming: 'Upcoming', overdue: 'Overdue', completed: 'Completed', categories: 'Lists', planner: 'Daily Planner', birthdays: 'Birthdays', reminders: 'Reminders', settings: 'Settings' }
@@ -75,7 +76,7 @@ function TaskEditor({ task, categories, onClose, onSave }: { task: Task | null; 
 function App() {
   const { data, setData, storageError, hasMeaningfulLocalData: hasExistingLocalData } = useAppData()
   const cloud = useCloudSync(data, setData)
-  useNativeAlarmSync(data)
+  const nativeAlarm = useNativeAlarmSync(data)
   const [guestChoice, setGuestChoice] = useState(() => localStorage.getItem('doneday-welcome-choice') === 'guest')
   const [view, setView] = useState<View>('dashboard')
   const [categoryView, setCategoryView] = useState('')
@@ -160,6 +161,7 @@ function App() {
     </main>
     <CloudAccount status={cloud.status} userId={cloud.userId} syncIssue={cloud.syncIssue} onImport={cloud.importLocal} onRetry={cloud.retry}/>
     {cloud.userId && <PushSetup/>}
+    {nativeAlarm.activeAlarm && <IosAlarmOverlay alarm={nativeAlarm.activeAlarm} onStop={() => void nativeAlarm.dismiss()} onSnooze={() => void nativeAlarm.snooze()}/>}
     <nav className="mobile-nav" aria-label="Mobile navigation">{(['dashboard','today','planner','birthdays'] as View[]).map(v=>{const Icon=iconFor[v];return <button key={v} className={view===v&&!categoryView?'selected':''} onClick={()=>navView(v)} aria-label={viewLabels[v]}><Icon size={20}/><small>{viewLabels[v]}</small></button>})}<details className={`mobile-more ${['all','upcoming','overdue','completed','categories','reminders','settings'].includes(view)?'selected':''}`}><summary aria-label="More navigation"><MoreHorizontal size={20}/><small>More</small></summary><div className="mobile-more-menu">{(['all','upcoming','overdue','completed','categories','reminders','settings'] as View[]).map(v=>{const Icon=iconFor[v];return <button key={v} className={view===v?'selected':''} onClick={e=>{navView(v);e.currentTarget.closest('details')?.removeAttribute('open')}}><Icon size={17}/>{viewLabels[v]}</button>})}</div></details></nav><button className="mobile-fab" onClick={()=>setEditor(null)} aria-label="Add task"><Plus size={24}/></button>
     {editor!==undefined&&<TaskEditor task={editor} categories={data.categories.length?data.categories:DEFAULT_DATA.categories} onClose={()=>setEditor(undefined)} onSave={saveTask}/>}<input ref={fileRef} type="file" accept="application/json,.json" hidden onChange={e=>void importData(e.target.files?.[0])}/>{activeReminder&&<div className="alarm-popover" role="alertdialog" aria-label="Task reminder"><BellRing size={20}/><div><strong>{activeReminder.task.title}</strong><p>{activeReminder.message}</p></div><button className="btn secondary small" onClick={()=>{setData(d=>({...d,tasks:d.tasks.map(t=>t.id===activeReminder.task.id?{...t,snoozeUntil:new Date(Date.now()+5*60000).toISOString()}:t)}));setActiveReminder(null)}}>Snooze 5m</button><button className="btn secondary small" onClick={()=>{setData(d=>({...d,tasks:d.tasks.map(t=>t.id===activeReminder.task.id?{...t,snoozeUntil:new Date(Date.now()+15*60000).toISOString()}:t)}));setActiveReminder(null)}}>Snooze 15m</button><button className="btn primary small" onClick={()=>{toggleTask(activeReminder.task);setActiveReminder(null)}}>Complete</button><button className="icon-btn" aria-label="Dismiss reminder" onClick={()=>setActiveReminder(null)}><X size={16}/></button></div>}{toast&&<div className="toast" role="status"><Check size={17}/>{toast}{undoTask&&toast==='Task deleted'&&<button onClick={undoDelete}><Undo2 size={15}/> Undo</button>}<button className="toast-close" aria-label="Dismiss" onClick={()=>{setToast('');setUndoTask(null)}}><X size={16}/></button></div>}{storageError&&<div className="storage-error" role="alert">{storageError}</div>}
   </div>
